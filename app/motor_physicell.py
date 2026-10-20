@@ -33,25 +33,78 @@ class MotorPhysiCell:
 
     def ejecutar(self, exe_path, config_path, cwd=None, timeout_ms=60000):
         """Ejecuta binario PhysiCell ya compilado. Retorna dict resultado."""
+        return self.ejecutar_cancelable(exe_path, config_path, cwd=cwd, timeout_ms=timeout_ms)
+
+    def ejecutar_cancelable(self, exe_path, config_path, cwd=None, timeout_ms=300000, stop_flag=None, linea_cb=None, max_time_min=None):
+        """Ejecuta PhysiCell con cancelación real y progreso por 'current simulated time'."""
+        import re
+        import time
         if not os.path.isfile(exe_path):
             return {"ok": False, "error": f"Ejecutable no existe: {exe_path}"}
         if not os.path.isfile(config_path):
             return {"ok": False, "error": f"Config no existe: {config_path}"}
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 [exe_path, config_path],
                 cwd=cwd or os.path.dirname(exe_path),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=timeout_ms / 1000,
+                bufsize=1,
             )
-            return {
-                "ok": proc.returncode == 0,
-                "code": proc.returncode,
-                "stdout": proc.stdout[-4000:],
-                "stderr": proc.stderr[-4000:],
-            }
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "Timeout de ejecucion"}
         except Exception as e:
+            return {"ok": False, "error": str(e)}
+        t0 = time.time()
+        out_tail = []
+        cur_sim = None
+        try:
+            while True:
+                if stop_flag is not None and stop_flag():
+                    try:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except Exception:
+                            proc.kill()
+                    except Exception:
+                        pass
+                    return {"ok": False, "cancelled": True, "error": "Cancelado por usuario", "stdout": "".join(out_tail)[-4000:]}
+                if timeout_ms and (time.time() - t0) * 1000 > timeout_ms:
+                    try:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except Exception:
+                            proc.kill()
+                    except Exception:
+                        pass
+                    return {"ok": False, "error": "Timeout de ejecucion", "stdout": "".join(out_tail)[-4000:]}
+                line = proc.stdout.readline() if proc.stdout else ""
+                if line:
+                    out_tail.append(line)
+                    if len(out_tail) > 400:
+                        out_tail = out_tail[-400:]
+                    m = re.search(r"current simulated time:\s*([\d.]+)", line)
+                    if m and linea_cb:
+                        try:
+                            cur_sim = float(m.group(1))
+                            linea_cb(cur_sim, line.strip())
+                        except Exception:
+                            pass
+                elif proc.poll() is not None:
+                    break
+            rest = ""
+            try:
+                rest = proc.communicate(timeout=10)[0] or ""
+            except Exception:
+                rest = ""
+            if rest:
+                out_tail.append(rest)
+            code = proc.returncode
+            return {"ok": code == 0, "code": code, "stdout": "".join(out_tail)[-4000:]}
+        except Exception as e:
+            try:
+                proc.kill()
+            except Exception:
+                pass
             return {"ok": False, "error": str(e)}

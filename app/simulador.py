@@ -27,30 +27,53 @@ def listar_escenarios(conn, experiment_id):
     return cur.fetchall()
 
 
-def generar_replica_config(base_xml, out_xml, seed=None):
-    """Copia base_xml a out_xml cambiando random_seed si se indica."""
+def fijar_output_folder(xml_path, folder):
+    """Reescribe <save><folder> para aislar salidas por réplica. No toca modelos."""
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    node = root.find(".//save/folder")
+    if node is None:
+        # crea save/folder si no existe
+        save = root.find(".//save")
+        if save is None:
+            save = ET.SubElement(root, "save")
+        node = ET.SubElement(save, "folder")
+    node.text = folder
+    tree.write(xml_path, encoding="unicode", xml_declaration=True)
+    return folder
+
+
+def generar_replica_config(base_xml, out_xml, seed=None, output_folder=None):
+    """Copia base_xml a out_xml cambiando random_seed y carpeta de salida si se indican."""
     os.makedirs(os.path.dirname(out_xml) or ".", exist_ok=True)
-    if seed is None:
+    if seed is None and output_folder is None:
         shutil.copyfile(base_xml, out_xml)
         return out_xml
     tree = ET.parse(base_xml)
     root = tree.getroot()
-    changed = False
-    for el in root.iter():
-        name = el.tag.split("}")[-1]
-        if name == "random_seed":
-            el.text = str(seed)
-            changed = True
-    # si no existe tag, crea en user_parameters si existe
-    if not changed:
+    if seed is not None:
+        changed = False
         for el in root.iter():
             name = el.tag.split("}")[-1]
-            if name == "user_parameters":
-                sub = ET.SubElement(el, "random_seed")
-                sub.set("type", "int")
-                sub.text = str(seed)
+            if name == "random_seed":
+                el.text = str(seed)
                 changed = True
-                break
+        if not changed:
+            for el in root.iter():
+                name = el.tag.split("}")[-1]
+                if name == "user_parameters":
+                    sub = ET.SubElement(el, "random_seed")
+                    sub.set("type", "int")
+                    sub.text = str(seed)
+                    break
+    if output_folder is not None:
+        node = root.find(".//save/folder")
+        if node is None:
+            save = root.find(".//save")
+            if save is None:
+                save = ET.SubElement(root, "save")
+            node = ET.SubElement(save, "folder")
+        node.text = output_folder
     tree.write(out_xml, encoding="unicode", xml_declaration=True)
     return out_xml
 
@@ -79,8 +102,37 @@ def actualizar_run(conn, run_id, status, end=False):
 
 def listar_runs(conn, experiment_id):
     cur = conn.cursor()
-    cur.execute(
-        "SELECT id, run_number, status, start_time, end_time, output_dir FROM runs WHERE experiment_id=? ORDER BY run_number",
-        (experiment_id,),
-    )
+    try:
+        cur.execute(
+            "SELECT id, run_number, status, start_time, end_time, output_dir FROM runs WHERE experiment_id=? ORDER BY run_number",
+            (experiment_id,),
+        )
+    except Exception:
+        cur.execute(
+            "SELECT id, run_number, status, start_time, end_time, output_dir FROM runs WHERE experiment_id=? ORDER BY run_number",
+            (experiment_id,),
+        )
     return cur.fetchall()
+
+
+def actualizar_experimento(conn, experiment_id, title, description, tags):
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE experiments SET title=?, description=?, tags=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
+        (title, description, tags, experiment_id),
+    )
+    conn.commit()
+
+
+def eliminar_experimento(conn, experiment_id):
+    cur = conn.cursor()
+    cur.execute("DELETE FROM runs WHERE experiment_id=?", (experiment_id,))
+    cur.execute("DELETE FROM escenarios WHERE experiment_id=?", (experiment_id,))
+    cur.execute("DELETE FROM experiments WHERE id=?", (experiment_id,))
+    conn.commit()
+
+
+def eliminar_escenario(conn, escenario_id):
+    cur = conn.cursor()
+    cur.execute("DELETE FROM escenarios WHERE id=?", (escenario_id,))
+    conn.commit()

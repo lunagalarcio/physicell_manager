@@ -1,49 +1,61 @@
 #!/usr/bin/env python3
-"""Temas QSS: claro, oscuro, verde fosforescente."""
+"""Temas QSS estilo Notion: claro, oscuro. Botones verde con hover amarillo."""
 
-LIGHT_QSS = """
-QMainWindow { background-color: #fafafa; color: #212121; }
-QWidget { font-family: 'Segoe UI'; }
-QFrame#CardExperiment { background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; margin: 4px 0; }
-QFrame#CardExperiment:hover { border-color: #1976d2; background-color: #f8f9fa; }
-QPushButton { background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 4px; padding: 5px 10px; color: #212121; }
-QPushButton:hover { background-color: #e0e0e0; }
-QPushButton:disabled { color: #9e9e9e; }
-QLineEdit, QSpinBox, QTextEdit, QPlainTextEdit { border: 1px solid #c0c0c0; border-radius: 4px; padding: 4px; background: white; color: #212121; }
-QProgressBar { border: 1px solid #b0b0b0; border-radius: 4px; background: #f5f5f5; text-align: center; color: #212121; }
-QProgressBar::chunk { background-color: #1976d2; }
-QLabel { color: #212121; }
-QScrollArea { border: none; }
+NOTION_FONT = "font-family: 'Segoe UI', 'Inter', sans-serif;"
+
+LIGHT_QSS = f"""
+QMainWindow {{ background-color: #f7f7f5; color: #37352f; }}
+QWidget {{ {NOTION_FONT} font-size: 13px; }}
+QFrame#CardExperiment {{ background-color: white; border: 1px solid #e9e9e7; border-radius: 10px; margin: 6px 0; padding: 4px; }}
+QFrame#CardExperiment:hover {{ border-color: #22c55e; background-color: #fbfdfb; }}
+QPushButton {{ background-color: #22c55e; border: 1px solid #16a34a; border-radius: 6px; padding: 6px 12px; color: white; font-weight: 600; }}
+QPushButton:hover {{ background-color: #facc15; border-color: #eab308; color: #422006; }}
+QPushButton:pressed {{ background-color: #16a34a; }}
+QPushButton:disabled {{ background-color: #e7e7e4; border-color: #e7e7e4; color: #9b9b97; }}
+QLineEdit, QSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{ border: 1px solid #e0e0de; border-radius: 6px; padding: 6px; background: white; color: #37352f; selection-background-color: #fef08a; }}
+QProgressBar {{ border: 1px solid #e0e0de; border-radius: 6px; background: #f1f1ef; text-align: center; color: #37352f; height: 14px; }}
+QProgressBar::chunk {{ background-color: #22c55e; border-radius: 5px; }}
+QLabel {{ color: #37352f; }}
+QCheckBox {{ color: #37352f; spacing: 6px; }}
+QScrollArea {{ border: none; background: transparent; }}
+QToolTip {{ background: #fefce8; color: #422006; border: 1px solid #eab308; }}
 """
 
-DARK_QSS = """
-QMainWindow { background-color: #1a1a2e; color: #e9e9e9; }
-QWidget { font-family: 'Segoe UI'; }
-QFrame#CardExperiment { background-color: #2a3a50; border: 1px solid #0f3460; border-radius: 8px; margin: 4px 0; }
-QFrame#CardExperiment:hover { border-color: #4fc3f7; background-color: #24344d; }
-QPushButton { background-color: #0f3460; border: 1px solid #164078; border-radius: 4px; padding: 5px 10px; color: #e9e9e9; }
-QPushButton:hover { background-color: #164078; }
-QPushButton:disabled { color: #78909c; }
-QLineEdit, QSpinBox, QTextEdit, QPlainTextEdit { border: 1px solid #0f3460; border-radius: 4px; padding: 4px; background: #1e2d45; color: #e9e9e9; }
-QProgressBar { border: 1px solid #0f3460; border-radius: 4px; background: #1e2d45; text-align: center; color: #e9e9e9; }
-QProgressBar::chunk { background-color: #4fc3f7; }
-QLabel { color: #e9e9e9; }
-QScrollArea { border: none; }
+DARK_QSS = f"""
+QMainWindow {{ background-color: #191919; color: #e8e8e6; }}
+QWidget {{ {NOTION_FONT} font-size: 13px; }}
+QFrame#CardExperiment {{ background-color: #202020; border: 1px solid #2e2e2c; border-radius: 10px; margin: 6px 0; padding: 4px; }}
+QFrame#CardExperiment:hover {{ border-color: #22c55e; background-color: #232823; }}
+QPushButton {{ background-color: #22c55e; border: 1px solid #16a34a; border-radius: 6px; padding: 6px 12px; color: #052e16; font-weight: 600; }}
+QPushButton:hover {{ background-color: #facc15; border-color: #eab308; color: #422006; }}
+QPushButton:pressed {{ background-color: #16a34a; color: white; }}
+QPushButton:disabled {{ background-color: #2e2e2c; border-color: #2e2e2c; color: #6f6f6b; }}
+QLineEdit, QSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{ border: 1px solid #2e2e2c; border-radius: 6px; padding: 6px; background: #202020; color: #e8e8e6; selection-background-color: #713f12; }}
+QProgressBar {{ border: 1px solid #2e2e2c; border-radius: 6px; background: #202020; text-align: center; color: #e8e8e6; height: 14px; }}
+QProgressBar::chunk {{ background-color: #22c55e; border-radius: 5px; }}
+QLabel {{ color: #e8e8e6; }}
+QCheckBox {{ color: #e8e8e6; spacing: 6px; }}
+QScrollArea {{ border: none; background: transparent; }}
+QToolTip {{ background: #422006; color: #fefce8; border: 1px solid #eab308; }}
 """
 
-GREEN_QSS = """
-QMainWindow { background-color: #f0fdf4; color: #166534; }
-QWidget { font-family: 'Segoe UI'; }
-QFrame#CardExperiment { background-color: white; border: 2px solid #059669; border-radius: 8px; margin: 4px 0; }
-QFrame#CardExperiment:hover { border-color: #00c853; background-color: #f0fdf4; }
-QPushButton { background-color: #059669; border: 1px solid #059669; border-radius: 4px; padding: 5px 10px; color: white; font-weight: bold; }
-QPushButton:hover { background-color: #00c853; border-color: #00c853; }
-QPushButton:disabled { background-color: #a7f3d0; color: #4b5563; }
-QLineEdit, QSpinBox, QTextEdit, QPlainTextEdit { border: 1px solid #059669; border-radius: 4px; padding: 4px; background: white; color: #166534; }
-QProgressBar { border: 2px solid #059669; border-radius: 4px; background: #f0fdf4; text-align: center; color: #166534; }
-QProgressBar::chunk { background-color: #00ff88; width: 10px; }
-QLabel { color: #166534; }
-QScrollArea { border: none; }
+# Verde Notion: base clara verdosa, acentos verde/amarillo más marcados
+GREEN_QSS = f"""
+QMainWindow {{ background-color: #f2fbf4; color: #14532d; }}
+QWidget {{ {NOTION_FONT} font-size: 13px; }}
+QFrame#CardExperiment {{ background-color: white; border: 1px solid #bbf7d0; border-radius: 10px; margin: 6px 0; padding: 4px; }}
+QFrame#CardExperiment:hover {{ border-color: #22c55e; background-color: #f0fdf4; }}
+QPushButton {{ background-color: #16a34a; border: 1px solid #15803d; border-radius: 6px; padding: 6px 12px; color: white; font-weight: 600; }}
+QPushButton:hover {{ background-color: #facc15; border-color: #eab308; color: #422006; }}
+QPushButton:pressed {{ background-color: #15803d; }}
+QPushButton:disabled {{ background-color: #dcfce7; border-color: #dcfce7; color: #64748b; }}
+QLineEdit, QSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{ border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px; background: white; color: #14532d; selection-background-color: #fef08a; }}
+QProgressBar {{ border: 1px solid #bbf7d0; border-radius: 6px; background: #ecfdf5; text-align: center; color: #14532d; height: 14px; }}
+QProgressBar::chunk {{ background-color: #22c55e; border-radius: 5px; }}
+QLabel {{ color: #14532d; }}
+QCheckBox {{ color: #14532d; spacing: 6px; }}
+QScrollArea {{ border: none; background: transparent; }}
+QToolTip {{ background: #fefce8; color: #422006; border: 1px solid #eab308; }}
 """
 
 THEMES = {"claro": LIGHT_QSS, "oscuro": DARK_QSS, "verde": GREEN_QSS}
@@ -53,14 +65,11 @@ def detectar_tema_sistema():
     """Detecta claro/oscuro del SO via Qt cuando sea posible, sino claro."""
     try:
         from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtCore import Qt
         app = QApplication.instance()
         if app:
             hints = app.styleHints()
-            # Qt 6.5+: colorScheme
             try:
                 scheme = hints.colorScheme()
-                # 1=Light, 2=Dark segun Qt.ColorScheme
                 if int(scheme) == 2:
                     return "oscuro"
                 return "claro"

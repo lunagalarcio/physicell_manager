@@ -17,7 +17,11 @@ REQUIRED_TAGS = [
 
 
 def validar_config(xml_path):
-    """Valida un XML de PhysiCell. Retorna dict con ok, errores, warnings."""
+    """Valida estructura PhysiCell sin listas rígidas de parámetros.
+
+    Comprueba secciones, coherencia interna y existencia de archivos
+    referenciados (cells.csv, reglas, .mat). No elimina parámetros desconocidos.
+    """
     result = {"ok": False, "errores": [], "warnings": [], "path": xml_path}
     if not xml_path or not os.path.isfile(xml_path):
         result["errores"].append("Archivo no existe.")
@@ -31,15 +35,21 @@ def validar_config(xml_path):
         result["errores"].append(f"Error lectura: {e}")
         return result
     root = tree.getroot()
+    base = os.path.dirname(os.path.abspath(xml_path))
 
     def find_any(tag):
-        # busca tag exacto en cualquier nivel
         for el in root.iter():
-            # quita namespace si existe
             name = el.tag.split("}")[-1]
             if name == tag:
                 return True
         return False
+
+    def all_of(tag):
+        out = []
+        for el in root.iter():
+            if el.tag.split("}")[-1] == tag:
+                out.append(el)
+        return out
 
     for sec in REQUIRED_SECTIONS:
         if not find_any(sec):
@@ -48,6 +58,47 @@ def validar_config(xml_path):
     for tag in REQUIRED_TAGS:
         if not find_any(tag):
             result["warnings"].append(f"Falta tag recomendado: {tag}")
+
+    # microambiente: cada variable con coeficientes físicos
+    for var in all_of("variable"):
+        nom = var.attrib.get("name", "?")
+        dif = var.find(".//diffusion_coefficient")
+        dec = var.find(".//decay_rate")
+        if dif is None or not (dif.text or "").strip():
+            result["warnings"].append(f"Variable '{nom}' sin diffusion_coefficient explícito")
+        if dec is None or not (dec.text or "").strip():
+            result["warnings"].append(f"Variable '{nom}' sin decay_rate explícito")
+
+    # definiciones celulares con fenotipo
+    cdefs = root.findall(".//cell_definitions/cell_definition")
+    if not cdefs:
+        result["errores"].append("Sin cell_definition en cell_definitions")
+    else:
+        for cd in cdefs:
+            if cd.find("phenotype") is None:
+                result["warnings"].append(f"Definición '{cd.attrib.get('name', '?')}' sin phenotype")
+
+    # archivos referenciados existen (rutas relativas al XML)
+    def _rutas(nodo, *tags):
+        for t in tags:
+            el = nodo.find(f".//{t}") if nodo is not None else None
+            if el is not None and el.text and el.text.strip():
+                yield el.text.strip()
+    for cp in all_of("cell_positions"):
+        folder = (cp.findtext("folder") or "").strip()
+        fname = (cp.findtext("filename") or "").strip()
+        if (cp.attrib.get("enabled", "true").lower() == "true") and fname:
+            p = fname if os.path.isabs(fname) else os.path.join(base, folder, fname) if folder else os.path.join(base, fname)
+            if not os.path.isfile(p):
+                result["warnings"].append(f"cells.csv referenciado no existe: {fname}")
+    for rs in all_of("ruleset"):
+        if (rs.attrib.get("enabled", "false").lower() == "true"):
+            folder = (rs.findtext("folder") or "").strip()
+            fname = (rs.findtext("filename") or "").strip()
+            if fname:
+                p = fname if os.path.isabs(fname) else os.path.join(base, folder, fname) if folder else os.path.join(base, fname)
+                if not os.path.isfile(p):
+                    result["errores"].append(f"Reglas habilitadas pero falta archivo: {fname}")
 
     if not result["errores"]:
         result["ok"] = True

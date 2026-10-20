@@ -63,3 +63,49 @@ def resumen_resultados(output_dir):
     if fr["xml"]:
         info["ultimo_xml"] = leer_output_xml_info(fr["xml"][-1])
     return info
+
+
+def listar_archivos(output_dir):
+    """Archivos de salida con tamaño, ordenados. Incluye subcarpeta output/ si existe."""
+    import os as _o
+    dirs = [output_dir, _o.path.join(output_dir, "output")] if output_dir else []
+    seen = set()
+    filas = []
+    for d in dirs:
+        if not d or not _o.path.isdir(d):
+            continue
+        for name in sorted(_o.listdir(d)):
+            p = _o.path.join(d, name)
+            if _o.path.isfile(p) and p not in seen:
+                seen.add(p)
+                try:
+                    sz = _o.path.getsize(p)
+                except Exception:
+                    sz = -1
+                filas.append((p, sz))
+    return filas
+
+
+def verificar_integridad(output_dir):
+    """Comprueba presencia mínima: snapshots, outputs XML, cells .mat y grafos."""
+    fr = listar_frames(output_dir)
+    import os as _o
+    cands = [output_dir, _o.path.join(output_dir or "", "output")]
+    mats = []
+    grafos = []
+    for d in cands:
+        if d and _o.path.isdir(d):
+            mats += [p for p in __import__("glob").glob(_o.path.join(d, "*_cells.mat"))]
+            grafos += [p for p in __import__("glob").glob(_o.path.join(d, "*_neighbor_graph.txt"))]
+    faltan = []
+    if not fr["svg"]:
+        faltan.append("snapshot*.svg")
+    if not fr["xml"]:
+        faltan.append("output*.xml")
+    if not mats:
+        faltan.append("*_cells.mat")
+    if not grafos:
+        faltan.append("*_neighbor_graph.txt")
+    return {"ok": not faltan, "faltan": faltan,
+            "n_svg": len(fr["svg"]), "n_xml": len(fr["xml"]),
+            "n_cells_mat": len(mats), "n_grafos": len(grafos)}
