@@ -9,149 +9,69 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QScrollArea, QFrame, QSpacerItem, QSizePolicy,
     QLineEdit, QFileDialog, QMessageBox, QSpinBox, QTextEdit, QProgressBar
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from .simulador import generar_replica_config, registrar_run, actualizar_run
-from .motor_physicell import MotorPhysiCell
-
-
-class ReplicaWorker(QThread):
-    prog = pyqtSignal(int, str)
-    done = pyqtSignal(dict)
-    fail = pyqtSignal(str)
-
-    def __init__(self, experiment_id, base_xml, n_replicas, exe_path="", db_path=""):
-        super().__init__()
-        self.experiment_id = experiment_id
-        self.base_xml = base_xml
-        self.n_replicas = n_replicas
-        self.exe_path = exe_path
-        self.db_path = db_path
-        self._stop = False
-
-    def stop(self):
-        self._stop = True
-
-    def run(self):
-        import sqlite3
-        try:
-            conn = sqlite3.connect(self.db_path)
-            motor = MotorPhysiCell()
-            base_dir = os.path.join(os.path.dirname(self.db_path), f"exp_{self.experiment_id}")
-            os.makedirs(base_dir, exist_ok=True)
-            for i in range(1, self.n_replicas + 1):
-                if self._stop:
-                    self.fail.emit("Cancelado por usuario")
-                    return
-                self.prog.emit(int((i - 1) * 100 / self.n_replicas), f"Replica {i}/{self.n_replicas} preparando")
-                out_xml = os.path.join(base_dir, f"replica_{i}.xml")
-                generar_replica_config(self.base_xml, out_xml, seed=1000 + i)
-                run_id = registrar_run(conn, self.experiment_id, i, status="running", output_dir=base_dir)
-                if self.exe_path and os.path.isfile(self.exe_path):
-                    r = motor.ejecutar(self.exe_path, out_xml, cwd=os.path.dirname(self.exe_path), timeout_ms=300000)
-                    actualizar_run(conn, run_id, "completed" if r.get("ok") else "failed", end=True)
-                else:
-                    # Sin binario PhysiCell no hay simulacion: solo config generada
-                    actualizar_run(conn, run_id, "registered", end=True)
-                self.prog.emit(int(i * 100 / self.n_replicas), f"Replica {i}/{self.n_replicas} lista (PhysiCell)")
-            conn.close()
-            self.done.emit({"experiment_id": self.experiment_id, "replicas": self.n_replicas})
-        except Exception as e:
-            try:
-                self.fail.emit(str(e))
-            except Exception:
-                pass
-
-
-def get_user_data_dir():
-    """Carpeta de datos especifica por usuario y SO."""
-    if sys.platform.startswith('win'):
-        base = os.environ.get('APPDATA') or os.path.expanduser('~')
-        return os.path.join(base, "PhysiCell_Experiments")
-    elif sys.platform.startswith('linux'):
-        base = os.environ.get('XDG_DATA_HOME')
-        if base:
-            return os.path.join(base, "physicell_experiments")
-        return os.path.join(os.path.expanduser('~'), '.local', 'share', 'physicell_experiments')
-    else:
-        base = os.path.expanduser('~/Library/Application Support')
-        return os.path.join(base, "physicell-experiments")
-
-
-def get_db_path():
-    data_dir = get_user_data_dir()
-    os.makedirs(data_dir, exist_ok=True)
-    return os.path.join(data_dir, "experiments.db")
-
-
-def init_database():
-    db_path = get_db_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS experiments (
-            id INTEGER PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
-            config_xml_path TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_modified DATETIME
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS runs (
-            id INTEGER PRIMARY KEY,
-            experiment_id INTEGER,
-            run_number INTEGER,
-            status TEXT DEFAULT 'pending',
-            start_time DATETIME,
-            end_time DATETIME,
-            output_dir TEXT,
-            FOREIGN KEY (experiment_id) REFERENCES experiments(id)
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS escenarios (
-            id INTEGER PRIMARY KEY,
-            experiment_id INTEGER,
-            nombre TEXT NOT NULL,
-            config_xml_path TEXT,
-            parametros_json TEXT DEFAULT '{}',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (experiment_id) REFERENCES experiments(id)
-        )
-    """)
-    conn.commit()
-    conn.close()
-    print(f"DB inicializada: {db_path}")
-    return db_path
+from .nucleo import ReplicaWorker, get_user_data_dir, get_db_path, init_database
 
 
 class CardExperiment(QFrame):
-    def __init__(self, experiment_id, title="Nuevo Experimento", description="", parent=None, on_click=None):
+    def __init__(self, experiment_id, title="Nuevo Experimento", description="", tags="", config_ok=False, n_runs=0, parent=None, on_click=None):
         super().__init__(parent)
         self.experiment_id = experiment_id
         self.on_click = on_click
         self.setObjectName("CardExperiment")
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        self.setMinimumHeight(110)
-        self.setMaximumHeight(150)
+        self.setMinimumSize(260, 150)
+        self.setMaximumHeight(190)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Clic para abrir. Título, descripción y etiquetas ayudan a organizar.")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(5)
         self.title_label = QLabel(title)
-        self.title_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        self.desc_label = QLabel(description)
-        self.desc_label.setWordWrap(True)
+        self.title_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.title_label.setWordWrap(True)
         layout.addWidget(self.title_label)
+        self.desc_label = QLabel(description or "Sin descripción. Clic para añadir contexto del ensayo.")
+        self.desc_label.setWordWrap(True)
         layout.addWidget(self.desc_label)
+        tag_txt = tags.strip() if tags else "sin etiquetas"
+        estado = "● config lista" if config_ok else "○ falta XML"
+        self.meta_label = QLabel(f"{tag_txt}  •  {n_runs} runs  •  {estado}")
+        self.meta_label.setWordWrap(True)
+        layout.addWidget(self.meta_label)
         layout.addStretch()
 
     def mousePressEvent(self, event):
         if self.on_click:
             self.on_click(self.experiment_id)
+        super().mousePressEvent(event)
+
+
+class NewExperimentCard(QFrame):
+    def __init__(self, parent=None, on_click=None):
+        super().__init__(parent)
+        self.on_click = on_click
+        self.setObjectName("CardExperiment")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumSize(260, 150)
+        self.setMaximumHeight(190)
+        self.setToolTip("Crear un nuevo experimento")
+        layout = QVBoxLayout(self)
+        layout.addStretch()
+        lbl = QLabel("+  Nuevo experimento")
+        lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl)
+        hint = QLabel("Título, descripción y etiquetas")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addStretch()
+
+    def mousePressEvent(self, event):
+        if self.on_click:
+            self.on_click()
         super().mousePressEvent(event)
 
 
@@ -161,8 +81,8 @@ class NotionWindow(QMainWindow):
         self.current_experiment_id = None
         self.worker = None
         self.current_theme = "claro"
-        self.setWindowTitle("PhysiCell Experiment Manager - MVP")
-        self.setMinimumSize(900, 600)
+        self.setWindowTitle("PhysiCell Experiment Manager")
+        self.setMinimumSize(1020, 680)
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
@@ -177,16 +97,25 @@ class NotionWindow(QMainWindow):
     def _setup_sidebar(self, main_layout):
         from PyQt6.QtWidgets import QComboBox
         self.sidebar = QWidget()
-        self.sidebar.setFixedWidth(210)
+        self.sidebar.setFixedWidth(260)
         sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(16, 24, 16, 24)
-        sidebar_layout.setSpacing(10)
-        title = QLabel("PhysiCell")
-        title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        sidebar_layout.setContentsMargins(16, 20, 16, 20)
+        sidebar_layout.setSpacing(8)
+        title = QLabel("PhysiCell Manager")
+        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         sidebar_layout.addWidget(title)
-        sub = QLabel("Experiments")
+        sub = QLabel("Gestión de experimentos PhysiCell")
+        sub.setWordWrap(True)
         sidebar_layout.addWidget(sub)
-        lbl_theme = QLabel("Tema:")
+        guide = QLabel(
+            "Cómo empezar:\n"
+            "1) Elige tu PhysiCell_settings.xml\n"
+            "2) Elige project.exe compilado\n"
+            "3) Crea experimento y lanza réplicas"
+        )
+        guide.setWordWrap(True)
+        sidebar_layout.addWidget(guide)
+        lbl_theme = QLabel("Tema: claro / oscuro / verde")
         sidebar_layout.addWidget(lbl_theme)
         self.combo_theme = QComboBox()
         self.combo_theme.addItems(["claro", "oscuro", "verde"])
@@ -195,19 +124,19 @@ class NotionWindow(QMainWindow):
         self.btn_auto_theme = QPushButton("Auto (sistema)")
         self.btn_auto_theme.clicked.connect(self._auto_theme)
         sidebar_layout.addWidget(self.btn_auto_theme)
-        lbl_cfg = QLabel("Config XML:")
-        lbl_cfg.setStyleSheet("color: #666666; font-size: 11px;")
+        lbl_cfg = QLabel("Archivo 1 - Config PhysiCell (.xml): Sirve como plantilla de réplicas.")
+        lbl_cfg.setWordWrap(True)
         sidebar_layout.addWidget(lbl_cfg)
         self.config_path = QLineEdit()
-        self.config_path.setPlaceholderText("Seleccionar PhysiCell_settings.xml")
+        self.config_path.setPlaceholderText("Ej: .../PhysiCell_settings.xml")
+        self.config_path.setToolTip("XML de PhysiCell. Debe incluir domain, overall, microenvironment y cell_definitions.")
         sidebar_layout.addWidget(self.config_path)
-        self.btn_browse = QPushButton("Examinar...")
+        self.btn_browse = QPushButton("1) Examinar XML...")
+        self.btn_browse.setToolTip("Selecciona tu archivo PhysiCell_settings.xml")
         self.btn_browse.clicked.connect(self._browse_config)
         sidebar_layout.addWidget(self.btn_browse)
-        self.btn_validate = QPushButton("Validar XML")
-        self.btn_validate.clicked.connect(self._validate_current_config)
-        sidebar_layout.addWidget(self.btn_validate)
-        self.btn_import = QPushButton("Importar XML")
+        self.btn_import = QPushButton("Importar a config/")
+        self.btn_import.setToolTip("Copia el XML a la carpeta config del proyecto")
         self.btn_import.clicked.connect(self._importar_config)
         sidebar_layout.addWidget(self.btn_import)
         sidebar_layout.addSpacerItem(
@@ -281,19 +210,23 @@ class NotionWindow(QMainWindow):
         self._apply_theme(detectar_tema_sistema())
 
     def _show_welcome(self):
+        self.main_title.setText("Experimentos")
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             w = item.widget()
             if w:
                 w.deleteLater()
-        welcome = QLabel(
-            "<h3>PhysiCell Experiment Manager</h3>"
-            "<p>MVP: gestion basica de experimentos</p>"
-            "<p>Click <b>+ New Experiment</b> para crear</p>"
+        intro = QLabel(
+            "<h2>Gestión de experimentos PhysiCell</h2>"
+            "<p>Crea tarjetas con título, descripción y etiquetas. Abre una tarjeta para configurar réplicas, ejecutar PhysiCell, visualizar estados y generar reportes.</p>"
+            "<p><b>Archivos que debes ingresar:</b><br>"
+            "1) <b>PhysiCell_settings.xml</b> en la barra lateral: plantilla base de la simulación.<br>"
+            "2) <b>project.exe</b> compilado de PhysiCell en el detalle del experimento: motor que ejecuta.<br>"
+            "Sin project.exe solo se generan configs y el estado queda como <i>registered</i>.</p>"
         )
-        welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.content_layout.addWidget(welcome)
-        self.content_layout.addStretch()
+        intro.setWordWrap(True)
+        self.content_layout.addWidget(intro)
+        self._refresh_list(mostrar_bienvenida=False)
 
     def _browse_config(self):
         fname, _ = QFileDialog.getOpenFileName(
@@ -318,50 +251,138 @@ class NotionWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Importar", r.get("error", "Error"))
 
-    def _validate_current_config(self):
-        from .xml_validator import validar_config
-        res = validar_config(self.config_path.text().strip())
-        if res["ok"]:
-            msg = "XML valido."
-            if res["warnings"]:
-                msg += "\nWarnings: " + "; ".join(res["warnings"])
-            QMessageBox.information(self, "Validacion", msg)
-        else:
-            QMessageBox.warning(self, "Validacion", "\n".join(res["errores"]))
-
     def _on_new_experiment(self):
+        from PyQt6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Nuevo experimento")
+        dlg.resize(420, 260)
+        lay = QVBoxLayout(dlg)
+        form = QFormLayout()
+        t_title = QLineEdit()
+        t_title.setPlaceholderText("Ej: Tumor + inmune, dosis O2 baja")
+        t_desc = QLineEdit()
+        t_desc.setPlaceholderText("Ej: Probar 5 réplicas con seed distinto")
+        t_tags = QLineEdit()
+        t_tags.setPlaceholderText("Ej: cancer, o2-bajo, lote-1 (separadas por coma)")
+        form.addRow("Título:", t_title)
+        form.addRow("Descripción:", t_desc)
+        form.addRow("Etiquetas:", t_tags)
+        lay.addLayout(form)
+        hint = QLabel("El XML actual de la barra lateral se guardará como plantilla del experimento.")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        lay.addWidget(btns)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        if not dlg.exec():
+            return
+        title = t_title.text().strip() or "Experimento sin título"
+        desc = t_desc.text().strip()
+        tags = t_tags.text().strip()
         cfg = self.config_path.text().strip()
+        if cfg:
+            from .xml_validator import validar_config as _vc2
+            _v = _vc2(cfg)
+            if not _v.get("ok"):
+                r = QMessageBox.warning(self, "XML base inválido",
+                    "El XML de la barra lateral es inválido:\n" + "; ".join(_v.get("errores", [])) +
+                    "\n\nSe creará igual y podrás corregirlo en el detalle del experimento. ¿Continuar?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if r != QMessageBox.StandardButton.Yes:
+                    return
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         cur.execute("SELECT MAX(id) FROM experiments")
         row = cur.fetchone()
         new_id = (row[0] or 0) + 1
         cur.execute(
-            "INSERT INTO experiments (id, title, description, config_xml_path) VALUES (?, ?, ?, ?)",
-            (new_id, f"Experiment {new_id}", "Configure simulation parameters", cfg),
+            "INSERT INTO experiments (id, title, description, config_xml_path, tags) VALUES (?, ?, ?, ?, ?)",
+            (new_id, title, desc, cfg, tags),
         )
         conn.commit()
         conn.close()
         self._refresh_list()
         self._show_experiment_detail(new_id)
 
-    def _refresh_list(self):
+    def _refresh_list(self, mostrar_bienvenida=True):
+        from PyQt6.QtWidgets import QGridLayout
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             w = item.widget()
             if w:
                 w.deleteLater()
+        if mostrar_bienvenida:
+            intro = QLabel("Tus experimentos. Usa la tarjeta + para crear uno nuevo con título, descripción y etiquetas.")
+            intro.setWordWrap(True)
+            self.content_layout.addWidget(intro)
+        brow = QHBoxLayout()
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Buscar por título, descripción o etiquetas...")
+        self.search_edit.setText(getattr(self, "_filtro", ""))
+        self.search_edit.textChanged.connect(self._filtrar_lista)
+        brow.addWidget(self.search_edit, 1)
+        bw = QWidget()
+        bw.setLayout(brow)
+        self.content_layout.addWidget(bw)
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        cur.execute("SELECT id, title, description FROM experiments ORDER BY id DESC")
-        rows = cur.fetchall()
-        conn.close()
-        if not rows:
-            self._show_welcome()
+        try:
+            cur.execute("SELECT id, title, description, tags, config_xml_path FROM experiments ORDER BY id DESC")
+        except Exception:
+            cur.execute("SELECT id, title, description FROM experiments ORDER BY id DESC")
+            rows = [(a, b, c, "", "") for a, b, c in cur.fetchall()]
+            conn.close()
+            self._pintar_grid(rows)
             return
-        for eid, title, desc in rows:
-            card = CardExperiment(eid, title=title, description=desc or "", on_click=self._show_experiment_detail)
-            self.content_layout.addWidget(card)
+        rows = cur.fetchall()
+        # runs por experimento
+        counts = {}
+        try:
+            cur.execute("SELECT experiment_id, COUNT(*) FROM runs GROUP BY experiment_id")
+            counts = dict(cur.fetchall())
+        except Exception:
+            pass
+        conn.close()
+        data = []
+        for r in rows:
+            eid, title, desc, tags, cfg = (list(r) + ["", ""])[:5]
+            data.append((eid, title, desc, tags, bool(cfg and str(cfg).strip()), counts.get(eid, 0)))
+        self._pintar_grid(data)
+
+    def _filtrar_lista(self, txt):
+        self._filtro = txt
+        self._refresh_list(mostrar_bienvenida=False)
+        try:
+            self.search_edit.setFocus()
+            self.search_edit.setCursorPosition(len(txt))
+        except Exception:
+            pass
+
+    def _pintar_grid(self, data):
+        from PyQt6.QtWidgets import QGridLayout
+        f = (getattr(self, "_filtro", "") or "").lower().strip()
+        if f:
+            data = [d for d in data if f in f"{d[1]} {d[2] if len(d) > 2 else ''} {d[3] if len(d) > 3 else ''}".lower()]
+        grid_w = QWidget()
+        grid = QGridLayout(grid_w)
+        grid.setSpacing(12)
+        grid.addWidget(NewExperimentCard(on_click=self._on_new_experiment), 0, 0)
+        col = 1
+        fila = 0
+        for item in data:
+            if len(item) == 6:
+                eid, title, desc, tags, ok, n = item
+            else:
+                eid, title, desc = item[:3]
+                tags, ok, n = "", False, 0
+            card = CardExperiment(eid, title=title, description=desc or "", tags=tags or "", config_ok=ok, n_runs=n, on_click=self._show_experiment_detail)
+            grid.addWidget(card, fila, col)
+            col += 1
+            if col > 1:
+                col = 0
+                fila += 1
+        self.content_layout.addWidget(grid_w)
         self.content_layout.addStretch()
 
     def _show_experiment_detail(self, experiment_id):
@@ -376,29 +397,109 @@ class NotionWindow(QMainWindow):
         if not row:
             return
         title, desc, cfg = row
-        if cfg and not self.config_path.text().strip():
-            self.config_path.setText(cfg)
         self.main_title.setText(f"Experimento {experiment_id}: {title}")
         while self.content_layout.count():
             item = self.content_layout.takeAt(0)
             w = item.widget()
             if w:
                 w.deleteLater()
-        info = QLabel(f"<b>{title}</b><br>{desc or ''}<br><i>Config: {cfg or self.config_path.text()}</i>")
+        info = QLabel(
+            f"<h2>{title}</h2>"
+            f"<p>{desc or 'Añade contexto: objetivo, hipótesis, lote.'}</p>"
+        )
         info.setWordWrap(True)
         self.content_layout.addWidget(info)
-        btn_back = QPushButton("Volver a lista")
+        brow = QHBoxLayout()
+        btn_back = QPushButton("← Volver a experimentos")
+        btn_back.setToolTip("Regresa a la cuadrícula de tarjetas")
         btn_back.clicked.connect(self._refresh_list)
-        self.content_layout.addWidget(btn_back)
+        btn_edit_meta = QPushButton("Editar datos")
+        btn_edit_meta.setToolTip("Editar título, descripción y etiquetas")
+        btn_edit_meta.clicked.connect(self._editar_metadatos)
+        btn_del = QPushButton("Eliminar")
+        btn_del.setToolTip("Borra experimento, runs y escenarios")
+        btn_del.clicked.connect(self._eliminar_experimento)
+        brow.addWidget(btn_back)
+        brow.addWidget(btn_edit_meta)
+        brow.addWidget(btn_del)
+        brow.addStretch()
+        bw = QWidget()
+        bw.setLayout(brow)
+        self.content_layout.addWidget(bw)
+        # escenarios del experimento
+        from .simulador import listar_escenarios
+        conn2 = sqlite3.connect(get_db_path())
+        escs = listar_escenarios(conn2, experiment_id)
+        conn2.close()
+        sbox = QFrame()
+        sbox.setObjectName("CardExperiment")
+        sl = QVBoxLayout(sbox)
+        sl.addWidget(QLabel("<b>Escenarios</b> (variantes de config dentro del experimento):"))
+        erow = QHBoxLayout()
+        self.esc_nombre = QLineEdit()
+        self.esc_nombre.setPlaceholderText("Nombre escenario, ej: o2-bajo")
+        btn_esc = QPushButton("Crear escenario desde XML actual")
+        btn_esc.clicked.connect(self._crear_escenario)
+        erow.addWidget(self.esc_nombre, 1)
+        erow.addWidget(btn_esc)
+        sl.addLayout(erow)
+        if escs:
+            for sid, nom, cpath in escs:
+                r2 = QHBoxLayout()
+                l2 = QLabel(f"#{sid} {nom} - {cpath}")
+                l2.setWordWrap(True)
+                b2 = QPushButton("Borrar")
+                b2.setFixedWidth(70)
+                b2.clicked.connect(lambda _=False, _s=sid: self._borrar_escenario(_s))
+                r2.addWidget(l2, 1)
+                r2.addWidget(b2)
+                cw = QWidget()
+                cw.setLayout(r2)
+                sl.addWidget(cw)
+        else:
+            sl.addWidget(QLabel("Sin escenarios. Crea uno para comparar variantes."))
+        self.content_layout.addWidget(sbox)
+        # XML propio del experimento con validación
+        from .xml_validator import validar_config as _vc
+        v0 = _vc(cfg) if cfg else {"ok": False, "errores": ["Sin XML asignado"], "warnings": []}
+        estado = "✓ válido" if v0.get("ok") else "✗ inválido"
+        box = QFrame()
+        box.setObjectName("CardExperiment")
+        bl = QVBoxLayout(box)
+        bl.addWidget(QLabel("<b>Archivo 1 - XML de este experimento</b> (plantilla de sus réplicas):"))
+        rowx = QHBoxLayout()
+        self.exp_config = QLineEdit(cfg or "")
+        self.exp_config.setPlaceholderText("Ej: .../PhysiCell_settings.xml")
+        self.exp_config.setToolTip("Cada experimento guarda su propio XML. No depende del campo global.")
+        btn_cx = QPushButton("...")
+        btn_cx.setFixedWidth(40)
+        btn_cx.clicked.connect(self._browse_exp_config)
+        btn_vx = QPushButton("Validar")
+        btn_vx.clicked.connect(self._validar_exp_config)
+        btn_sx = QPushButton("Guardar XML")
+        btn_sx.clicked.connect(self._guardar_exp_config)
+        rowx.addWidget(self.exp_config, 1)
+        rowx.addWidget(btn_cx)
+        rowx.addWidget(btn_vx)
+        rowx.addWidget(btn_sx)
+        bl.addLayout(rowx)
+        self.lbl_exp_valid = QLabel(f"Estado: {estado}" + (f" - {'; '.join(v0.get('errores', []))}" if not v0.get("ok") else ""))
+        self.lbl_exp_valid.setWordWrap(True)
+        bl.addWidget(self.lbl_exp_valid)
+        bl.addWidget(QLabel("<b>Archivo 2 - Motor PhysiCell:</b> selecciona abajo tu project.exe compilado. Sin él solo se generan réplicas."))
+        self.content_layout.addWidget(box)
         # controles replicas
         row_h = QHBoxLayout()
-        lbl = QLabel("Replicas:")
+        lbl = QLabel("Réplicas:")
+        lbl.setToolTip("Cuántas copias con distinto random_seed se generarán")
         self.spin_replicas = QSpinBox()
         self.spin_replicas.setMinimum(1)
         self.spin_replicas.setMaximum(50)
         self.spin_replicas.setValue(3)
+        self.spin_replicas.setToolTip("1 a 50 réplicas por ejecución")
         self.exe_path = QLineEdit()
-        self.exe_path.setPlaceholderText("Binario PhysiCell opcional (project.exe)")
+        self.exe_path.setPlaceholderText("Archivo 2: .../project.exe (motor PhysiCell compilado)")
+        self.exe_path.setToolTip("Binario compilado con make. Obligatorio para simular, opcional para solo generar configs.")
         btn_exe = QPushButton("...")
         btn_exe.setFixedWidth(40)
         btn_exe.clicked.connect(self._browse_exe)
@@ -453,42 +554,127 @@ class NotionWindow(QMainWindow):
         cont2 = QWidget()
         cont2.setLayout(row2)
         self.content_layout.addWidget(cont2)
-        # navegacion temporal
-        row3 = QHBoxLayout()
-        self.btn_prev = QPushButton("<")
-        self.btn_prev.setFixedWidth(40)
-        self.btn_prev.clicked.connect(lambda: self._mover_frame(-1))
-        self.btn_next = QPushButton(">")
-        self.btn_next.setFixedWidth(40)
-        self.btn_next.clicked.connect(lambda: self._mover_frame(1))
-        self.lbl_frame = QLabel("Frame 0")
-        self.frame_idx = 0
-        row3.addWidget(QLabel("Estados temporales:"))
-        row3.addWidget(self.btn_prev)
-        row3.addWidget(self.lbl_frame)
-        row3.addWidget(self.btn_next)
-        row3.addStretch()
-        cont3 = QWidget()
-        cont3.setLayout(row3)
-        self.content_layout.addWidget(cont3)
+        # visor 2D/3D integrado (sin PNG externos)
+        from .visor_widget import VisorPhysiCell
+        lbl_vis = QLabel("<b>Visualización 2D y 3D integrada:</b> usa la carpeta output de PhysiCell y el slider para navegar estados temporales.")
+        lbl_vis.setWordWrap(True)
+        self.content_layout.addWidget(lbl_vis)
+        self.visor = VisorPhysiCell(output_dir=r"C:\Users\PC\Downloads\gestor_physicell\gestor_physicell\PhysiCell\output")
+        self.visor.setMinimumHeight(380)
+        self.content_layout.addWidget(self.visor)
         self.content_layout.addStretch()
+
+    def _editar_metadatos(self):
+        from PyQt6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        from .simulador import actualizar_experimento
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute("SELECT title, description, tags FROM experiments WHERE id=?", (self.current_experiment_id,))
+        t, d, g = cur.fetchone() or ("", "", "")
+        conn.close()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Editar experimento")
+        lay = QVBoxLayout(dlg)
+        form = QFormLayout()
+        e1, e2, e3 = QLineEdit(t), QLineEdit(d or ""), QLineEdit(g or "")
+        form.addRow("Título:", e1)
+        form.addRow("Descripción:", e2)
+        form.addRow("Etiquetas:", e3)
+        lay.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        lay.addWidget(btns)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        if dlg.exec():
+            conn = sqlite3.connect(get_db_path())
+            actualizar_experimento(conn, self.current_experiment_id, e1.text().strip() or t, e2.text().strip(), e3.text().strip())
+            conn.close()
+            self._show_experiment_detail(self.current_experiment_id)
+
+    def _eliminar_experimento(self):
+        from .simulador import eliminar_experimento
+        r = QMessageBox.question(self, "Eliminar", "Borra experimento, runs y escenarios. ¿Continuar?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if r != QMessageBox.StandardButton.Yes:
+            return
+        conn = sqlite3.connect(get_db_path())
+        eliminar_experimento(conn, self.current_experiment_id)
+        conn.close()
+        self.current_experiment_id = None
+        self._refresh_list()
+
+    def _crear_escenario(self):
+        from .simulador import crear_escenario
+        from .xml_validator import validar_config
+        nom = self.esc_nombre.text().strip() or "escenario-1"
+        cfg = self.exp_config.text().strip()
+        v = validar_config(cfg)
+        if not v.get("ok"):
+            QMessageBox.warning(self, "Escenario", "XML inválido: " + "; ".join(v.get("errores", [])))
+            return
+        conn = sqlite3.connect(get_db_path())
+        crear_escenario(conn, self.current_experiment_id, nom, cfg, "{}")
+        conn.close()
+        self._show_experiment_detail(self.current_experiment_id)
+
+    def _borrar_escenario(self, sid):
+        from .simulador import eliminar_escenario
+        conn = sqlite3.connect(get_db_path())
+        eliminar_escenario(conn, sid)
+        conn.close()
+        self._show_experiment_detail(self.current_experiment_id)
 
     def _browse_exe(self):
         fname, _ = QFileDialog.getOpenFileName(self, "Binario PhysiCell", "", "Ejecutable (*.exe);;Todos (*)")
         if fname:
             self.exe_path.setText(fname)
 
+    def _browse_exp_config(self):
+        fname, _ = QFileDialog.getOpenFileName(self, "XML de este experimento", "", "XML (*.xml);;Todos (*)")
+        if fname:
+            self.exp_config.setText(fname)
+            self._validar_exp_config(silencioso=True)
+
+    def _validar_exp_config(self, silencioso=False):
+        from .xml_validator import validar_config
+        res = validar_config(self.exp_config.text().strip())
+        if res.get("ok"):
+            msg = "Estado: ✓ válido" + (f" - warnings: {'; '.join(res.get('warnings', []))}" if res.get("warnings") else "")
+            self.lbl_exp_valid.setText(msg)
+            if not silencioso:
+                QMessageBox.information(self, "Validación", "XML válido para este experimento.")
+        else:
+            self.lbl_exp_valid.setText(f"Estado: ✗ inválido - {'; '.join(res.get('errores', []))}")
+            if not silencioso:
+                QMessageBox.warning(self, "Validación", "\n".join(res.get("errores", [])))
+        return res
+
+    def _guardar_exp_config(self):
+        path = self.exp_config.text().strip()
+        from .xml_validator import validar_config
+        v = validar_config(path)
+        if not v.get("ok"):
+            QMessageBox.warning(self, "Guardar", "No se guarda: " + "; ".join(v.get("errores", [])))
+            return
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute("UPDATE experiments SET config_xml_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?", (path, self.current_experiment_id))
+        conn.commit()
+        conn.close()
+        self.lbl_exp_valid.setText("Estado: ✓ válido - guardado en este experimento")
+        self.log.append(f"XML guardado en experimento {self.current_experiment_id}: {path}")
+
     def _ejecutar_replicas(self):
         if self.current_experiment_id is None:
             return
-        base_xml = self.config_path.text().strip()
+        base_xml = self.exp_config.text().strip() if hasattr(self, "exp_config") else self.config_path.text().strip()
         if not base_xml:
-            QMessageBox.warning(self, "Falta config", "Seleccione config XML en sidebar.")
+            QMessageBox.warning(self, "Falta config", "Asigna el XML de este experimento arriba.")
             return
         from .xml_validator import validar_config
         v = validar_config(base_xml)
         if not v["ok"]:
-            QMessageBox.warning(self, "XML invalido", "\n".join(v["errores"]))
+            QMessageBox.warning(self, "XML invalido en este experimento", "\n".join(v["errores"]))
             return
         n = self.spin_replicas.value()
         self.btn_run.setEnabled(False)
@@ -597,15 +783,19 @@ class NotionWindow(QMainWindow):
     def _comparar_replicas(self):
         import glob, os
         from .config_manager import comparar_replicas
+        from .comparacion import generar_grafica_comparacion
         d = self._output_dir_actual()
-        xmls = sorted(glob.glob(os.path.join(d, "replica_*.xml")))
-        if not xmls:
-            self.log.append("Sin replicas para comparar.")
-            return
-        filas = comparar_replicas(xmls)
-        self.log.append("Comparacion replicas (path | seed | bytes):")
-        for f in filas:
-            self.log.append(f"{os.path.basename(f['path'])} | seed={f['seed']} | {f['bytes']}")
+        xmls = sorted(glob.glob(os.path.join(d, "replica_*", "replica_*.xml"))) or sorted(glob.glob(os.path.join(d, "replica_*.xml")))
+        if xmls:
+            filas = comparar_replicas(xmls)
+            self.log.append("Seeds por réplica:")
+            for f in filas:
+                self.log.append(f"{os.path.basename(os.path.dirname(f['path']))}/{os.path.basename(f['path'])} | seed={f['seed']}")
+        out_png = os.path.join(d, "comparacion.png")
+        r = generar_grafica_comparacion(get_db_path(), self.current_experiment_id, out_png)
+        self.log.append(f"Gráfica: {r['path']} runs={len(r['filas'])} sin_datos={r['sin_datos']}")
+        for f in r["filas"]:
+            self.log.append(f"run {f['run']}: {f['status']} n_final={f['n_final']}")
 
     def _detener_worker(self):
         if self.worker and self.worker.isRunning():

@@ -1,0 +1,34 @@
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+env/
+.env/
+
+# ----- PyInstaller / distribución -----
+build/
+dist/
+*.exe
+
+# ----- Sistema operativo / usuario -----
+%APPDATA%/PhysiCell_Experiments
+*.db
+*.sqlite
+*.sqlite3
+
+# ----- Salidas de simulación (generadas por PhysiCell) -----
+exp_*/
+replica_*/
+output/
+
+# ----- Archivos generados por el usuario (logs, capturas, etc.) -----
+*.log
+*.png
+*.jpg
+*.mp4
+
+# ----- Windows específicas -----
+Thumbs.db
+Desktop.ini
