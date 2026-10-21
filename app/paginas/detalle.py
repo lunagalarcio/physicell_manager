@@ -434,11 +434,29 @@ class PaginaDetalle(PaginaBase):
             return
         n = self.run_reps.value()
         exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
+        cpp = self.cfg_cpp.text().strip() if hasattr(self, "cfg_cpp") else ""
+
+        # Persistencia automática: guarda el motor y custom.cpp en la BD aunque no se cierre la pestaña
+        conn = self.conn()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE experiments SET binary_path=?, custom_cpp_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
+            (exe, cpp, eid),
+        )
+        conn.commit()
+        conn.close()
         self.lw._last_exe = exe
-        if not exe or not os.path.isfile(exe):
+
+        if not exe:
             QMessageBox.warning(
                 self.lw, "Ejecución",
-                "Configura el Motor PhysiCell (project.exe) en la pestaña Configuración y guárdalo antes de ejecutar."
+                "Configura la ruta del Motor PhysiCell (project.exe) en la pestaña Configuración."
+            )
+            return
+        if not os.path.isfile(exe):
+            QMessageBox.warning(
+                self.lw, "Ejecución",
+                f"El ejecutable no existe en la ruta indicada:\n{exe}"
             )
             return
         self.btn_run.setEnabled(False)
