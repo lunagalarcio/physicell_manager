@@ -17,10 +17,6 @@ from .nucleo import init_database
 from .paginas.base import PaginaBase
 from .paginas.resumen import PaginaResumen
 from .paginas.experimentos import PaginaExperimentos
-from .paginas.configuraciones import PaginaConfiguraciones
-from .paginas.ejecuciones import PaginaEjecuciones
-from .paginas.visualizacion_global import PaginaVisualizacion
-from .paginas.resultados_global import PaginaResultados
 from .paginas.comparacion_global import PaginaComparacion
 from .paginas.reportes import PaginaReportes
 from .paginas.preferencias import PaginaPreferencias
@@ -62,8 +58,7 @@ class LabWindow(QMainWindow):
         self.nav_btns = {}
         self.stack = QStackedWidget()
         self._secciones = [
-            "Resumen", "Experimentos", "Configuraciones", "Ejecuciones", "Visualización",
-            "Resultados", "Comparación", "Reportes", "Ajustes",
+            "Resumen", "Experimentos", "Comparación", "Reportes", "Ajustes",
         ]
         for i, name in enumerate(self._secciones):
             b = QPushButton(name)
@@ -83,10 +78,6 @@ class LabWindow(QMainWindow):
         for nombre, cls in [
             ("Resumen", PaginaResumen),
             ("Experimentos", PaginaExperimentos),
-            ("Configuraciones", PaginaConfiguraciones),
-            ("Ejecuciones", PaginaEjecuciones),
-            ("Visualización", PaginaVisualizacion),
-            ("Resultados", PaginaResultados),
             ("Comparación", PaginaComparacion),
             ("Reportes", PaginaReportes),
             ("Ajustes", PaginaPreferencias),
@@ -216,15 +207,6 @@ class LabWindow(QMainWindow):
 
     def refrescar_exps(self):
         self.paginas["Experimentos"].refrescar()
-
-    def refrescar_configs(self):
-        self.paginas["Configuraciones"].refrescar()
-
-    def refrescar_ejec(self):
-        self.paginas["Ejecuciones"].refrescar()
-
-    def refrescar_res_page(self):
-        self.paginas["Resultados"].refrescar()
 
     def refrescar_cmp_page(self):
         self.paginas["Comparación"].refrescar()
