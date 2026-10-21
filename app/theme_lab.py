@@ -198,10 +198,6 @@ QProgressBar#ProgresoReplicas::chunk {{
     background-color: {LIMA};
     border-radius: 3px;
 }}
-    color: {TEXTO};
-    font-size: {TAM_KPI}px;
-    font-weight: 700;
-}}
 QLabel#KpiLbl {{
     color: {TEXTO2};
     font-size: {TAM_MENOR}px;
@@ -217,30 +213,77 @@ QPushButton#Primary {{
     font-weight: 700;
     font-size: {TAM_BASE}px;
 }}
-QPushButton#Primary:hover {{ background-color: {LIMA_HOVER}; }}
+QPushButton#Primary:hover {{
+    background-color: {LIMA_HOVER};
+    border-color: {LIMA_HOVER};
+}}
+QPushButton#Primary:pressed {{
+    background-color: {LIMA_SUAVE};
+    border-color: {LIMA_SUAVE};
+}}
 QPushButton#Primary:disabled {{
     background-color: #3a3a38;
     border-color: #3a3a38;
     color: #8a8a86;
 }}
+QPushButton#Primary:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
 QPushButton#Secondary {{
-    background-color: transparent;
+    background-color: #232323;
     border: {GROSOR_BORDE}px solid {BORDE};
     border-radius: {RADIO_S}px;
     padding: 7px 14px;
     color: {TEXTO};
     font-size: {TAM_BASE}px;
 }}
-QPushButton#Secondary:hover {{ border-color: {LIMA}; color: {LIMA}; }}
+QPushButton#Secondary:hover {{
+    background-color: #2a2a2a;
+    border-color: {LIMA};
+    color: {LIMA};
+}}
+QPushButton#Secondary:pressed {{
+    background-color: #2a2a2a;
+    border-color: {LIMA};
+    color: {LIMA};
+}}
+QPushButton#Secondary:disabled {{
+    background-color: #232323;
+    border-color: #343434;
+    color: #8a8a8a;
+}}
+QPushButton#Secondary:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
 QPushButton#Danger {{
-    background-color: transparent;
+    background-color: #232323;
     border: {GROSOR_BORDE}px solid #5a2b2e;
     border-radius: {RADIO_S}px;
     padding: 7px 14px;
     color: {ROJO};
     font-size: {TAM_BASE}px;
 }}
-QPushButton#Danger:hover {{ background-color: {ROJO_SUAVE}; }}
+QPushButton#Danger:hover {{
+    background-color: {ROJO_SUAVE};
+    border-color: #5a2b2e;
+    color: {TEXTO};
+}}
+QPushButton#Danger:pressed {{
+    background-color: #1a1414;
+    border-color: #5a2b2e;
+    color: {ROJO};
+}}
+QPushButton#Danger:disabled {{
+    background-color: #232323;
+    border-color: #343434;
+    color: #8a8a8a;
+}}
+QPushButton#Danger:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
 QPushButton#Fantasma {{
     background: transparent;
     border: none;
@@ -249,7 +292,106 @@ QPushButton#Fantasma {{
     color: {TEXTO2};
     font-size: {TAM_BASE}px;
 }}
-QPushButton#Fantasma:hover {{ background-color: #2a2a2a; color: {TEXTO}; }}
+QPushButton#Fantasma:hover {{
+    background-color: #2a2a2a;
+    color: {TEXTO};
+}}
+QPushButton#Fantasma:pressed {{
+    background-color: #2a2a2a;
+    color: {TEXTO};
+}}
+QPushButton#Fantasma:disabled {{
+    color: #666666;
+}}
+QPushButton#Fantasma:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
+QPushButton#CardAccion {{
+    background-color: {LIMA};
+    border: {GROSOR_BORDE}px solid {LIMA};
+    border-radius: {RADIO_S}px;
+    padding: 8px 16px;
+    color: #1a2e05;
+    font-weight: 700;
+    font-size: {TAM_BASE}px;
+    text-align: left;
+}}
+QPushButton#CardAccion:hover {{
+    background-color: {LIMA_HOVER};
+    border-color: {LIMA_HOVER};
+}}
+QPushButton#CardAccion:pressed {{
+    background-color: {LIMA_SUAVE};
+    border-color: {LIMA_SUAVE};
+}}
+QPushButton#CardAccion:disabled {{
+    background-color: #3a3a38;
+    border-color: #3a3a38;
+    color: #8a8a86;
+}}
+QPushButton#CardAccion:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
+/* ---------- Botones de navegación lateral ---------- */
+QPushButton#NavBtn {{
+    background: transparent;
+    border: none;
+    border-radius: {RADIO_S}px;
+    padding: 9px 12px;
+    color: {TEXTO2};
+    text-align: left;
+    font-weight: 600;
+    font-size: {TAM_BASE}px;
+}}
+QPushButton#NavBtn:hover {{
+    background-color: #2a2a2a;
+    color: {TEXTO};
+}}
+QPushButton#NavBtn:pressed {{
+    background-color: #2a2a2a;
+    color: {TEXTO};
+}}
+QPushButton#NavBtn:checked {{
+    background-color: #2c2c2c;
+    color: {LIMA};
+    border: {GROSOR_BORDE}px solid {BORDE};
+}}
+QPushButton#NavBtn:disabled {{
+    color: #666666;
+}}
+QPushButton#NavBtn:focus {{
+    border-color: {BORDE_ENFOQUE};
+}}
+
+/* ---------- Botones de QMessageBox y diálogos ---------- */
+QMessageBox QPushButton {{
+    min-width: 90px;
+    padding: 6px 14px;
+    border-radius: {RADIO_S}px;
+    font-size: {TAM_BASE}px;
+    background-color: #232323;
+    border: {GROSOR_BORDE}px solid {BORDE};
+    color: {TEXTO};
+}}
+QMessageBox QPushButton:hover {{
+    border-color: {LIMA};
+    color: {LIMA};
+}}
+QDialogButtonBox QPushButton {{
+    min-width: 90px;
+    padding: 6px 14px;
+    border-radius: {RADIO_S}px;
+    font-size: {TAM_BASE}px;
+    background-color: #232323;
+    border: {GROSOR_BORDE}px solid {BORDE};
+    color: {TEXTO};
+}}
+QDialogButtonBox QPushButton:hover {{
+    border-color: {LIMA};
+    color: {LIMA};
+}}
 
 /* ---------- Entradas ---------- */
 QLineEdit, QSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{
