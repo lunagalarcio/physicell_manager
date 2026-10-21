@@ -10,7 +10,7 @@ from PyQt6.QtGui import QFont
 
 from .base import (
     PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, ESTILO_ESTADO,
-    exp_estado, ESPACIO_M, ESPACIO_L, ESPACIO_XS, TAM_H2,
+    exp_estado, ESPACIO_M, ESPACIO_L, ESPACIO_XS, ESPACIO_S, TAM_H2,
     ExperimentoCard, estadisticas_experimento, estado_general_experimento,
 )
 from .. import simulador as SIM
@@ -30,8 +30,8 @@ class KpiCard(Tarjeta):
 
     def __init__(self, numero, etiqueta, padre=None):
         super().__init__(padre=padre)
-        self.setFixedWidth(210)
-        self.setFixedHeight(115)
+        self.setFixedWidth(230)
+        self.setFixedHeight(140)
 
         fila = QHBoxLayout()
         fila.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
@@ -44,7 +44,7 @@ class KpiCard(Tarjeta):
 
         col = QVBoxLayout()
         col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(ESPACIO_XS)
+        col.setSpacing(ESPACIO_S)
         col.addWidget(num)
         col.addWidget(lbl)
 

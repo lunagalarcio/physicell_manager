@@ -44,7 +44,7 @@ TAM_H1 = 20
 TAM_H2 = 14
 TAM_TEXTO = 13
 TAM_MENOR = 11
-TAM_KPI = 30
+TAM_KPI = 40
 
 LAB_QSS = f"""
 * {{
@@ -198,9 +198,15 @@ QProgressBar#ProgresoReplicas::chunk {{
     background-color: {LIMA};
     border-radius: 3px;
 }}
+QLabel#KpiNum {{
+    color: {TEXTO};
+    font-size: {TAM_KPI}px;
+    font-weight: 800;
+}}
 QLabel#KpiLbl {{
     color: {TEXTO2};
     font-size: {TAM_MENOR}px;
+    font-weight: 600;
 }}
 
 /* ---------- Botones ---------- */
