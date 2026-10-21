@@ -118,6 +118,19 @@ QLabel#Muted {{
     color: {TEXTO2};
     font-size: {TAM_MENOR}px;
 }}
+QLabel#CardTitulo {{
+    color: {TEXTO};
+    font-size: 15px;
+    font-weight: 700;
+}}
+QLabel#CardDesc {{
+    color: {TEXTO2};
+    font-size: 11px;
+}}
+QLabel#CardMeta {{
+    color: {TEXTO2};
+    font-size: 10px;
+}}
 QLabel#KpiNum {{
     color: {TEXTO};
     font-size: {TAM_KPI}px;
@@ -344,11 +357,20 @@ QFrame#Separador {{
 
 # ---------- Estilos de estado (para badges / etiquetas) ----------
 ESTILO_ESTADO = {
-    "Sin configurar": "#A6A6A6", "Listo para ejecutar": LIMA,
-    "En ejecución": AMARILLO, "Completado": VERDE_OK, "Error": ROJO,
-    "Sin XML": "#A6A6A6", "Válido": VERDE_OK, "Inválido": ROJO,
-    "Inexistente": ROJO, "Sin motor": "#A6A6A6", "Listo": VERDE_OK,
-    "registrado": "#A6A6A6",
+    "Sin configurar": TEXTO2, "Configurado": LIMA,
+    "En ejecución": AMARILLO, "Completado": VERDE_OK, "Con errores": ROJO,
+    "Sin XML": TEXTO2, "Válido": VERDE_OK, "Inválido": ROJO,
+    "Inexistente": ROJO, "Sin motor": TEXTO2, "Listo": VERDE_OK,
+    "registrado": TEXTO2,
+}
+
+# Estados internos del experimento (claves propias)
+ESTADO_EXPERIMENTO = {
+    "en_ejecucion": AMARILLO,
+    "con_errores": ROJO,
+    "completado": VERDE_OK,
+    "configurado": LIMA,
+    "sin_configurar": TEXTO2,
 }
 
 # ---------- Colores de prioridad / severidad ----------

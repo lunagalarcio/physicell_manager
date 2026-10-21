@@ -1,13 +1,13 @@
 """Página de Experimentos: lista, creación y acceso al detalle."""
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QWidget, QGridLayout, QFrame, QDialog,
+    QScrollArea, QWidget, QGridLayout, QDialog,
     QFormLayout, QDialogButtonBox, QMessageBox, QMenu
 )
-from PyQt6.QtGui import QFont
 
 from .base import (
-    PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, ESPACIO_M,
+    PaginaBase, Seccion, Tarjeta, xml_estado, ESPACIO_M,
+    ExperimentoCard, estadisticas_experimento, estado_general_experimento,
 )
 from .. import simulador as SIM
 from ..theme_lab import LIMA
@@ -59,40 +59,84 @@ class PaginaExperimentos(PaginaBase):
         cur = conn.cursor()
         try:
             cur.execute(
-                "SELECT id, title, description, tags, config_xml_path FROM experiments ORDER BY id DESC"
+                """SELECT e.id, e.title, e.description, e.tags, e.config_xml_path,
+                          e.last_modified,
+                          COUNT(r.id) as total_runs,
+                          SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN r.status IN ('failed', 'cancelled')
+                                   THEN 1 ELSE 0 END),
+                          MAX(r.start_time)
+                   FROM experiments e
+                   LEFT JOIN runs r ON e.id = r.experiment_id
+                   GROUP BY e.id
+                   ORDER BY e.id DESC"""
             )
             filas = cur.fetchall()
         except Exception:
-            filas = []
-        counts = {}
-        try:
-            cur.execute("SELECT experiment_id, COUNT(*) FROM runs GROUP BY experiment_id")
-            counts = dict(cur.fetchall())
-        except Exception:
-            pass
+            cur.execute(
+                "SELECT id, title, description, tags, config_xml_path, last_modified "
+                "FROM experiments ORDER BY id DESC"
+            )
+            filas = [
+                (a, b, c, d, e, f, 0, 0, 0, 0, None)
+                for a, b, c, d, e, f in cur.fetchall()
+            ]
         conn.close()
 
         col = fila = 0
-        for eid, title, desc, tags, cfg in filas:
+        for r in filas:
+            eid = r[0]
+            title = r[1]
+            desc = r[2]
+            tags = r[3] if len(r) > 3 else ""
+            cfg = r[4] if len(r) > 4 else ""
+            modif = r[5] if len(r) > 5 else None
+
             if q and q not in f"{title} {desc} {tags}".lower():
                 continue
-            xe, _ = xml_estado(cfg)
-            card = self._tarjeta_experimento(
-                eid, title, desc, tags, None, xe, counts.get(eid, 0)
+
+            # Estadísticas de ejecuciones
+            total_runs = r[6] if len(r) > 6 else 0
+            completadas = r[7] if len(r) > 7 else 0
+            en_curso = r[8] if len(r) > 8 else 0
+            falladas = r[9] if len(r) > 9 else 0
+            ultima_fecha = r[10] if len(r) > 10 else None
+
+            # Estado del XML
+            xe_label, xe_clave = xml_estado(cfg)
+
+            # Estado general del experimento
+            n_failed = falladas
+            n_completed = completadas
+            n_running = en_curso
+            xml_ok = xe_label == "Válido"
+            estado_general, estado_clave = estado_general_experimento(
+                total_runs, n_running, n_failed, n_completed, xml_ok
+            )
+
+            card = ExperimentoCard(
+                eid=eid,
+                title=title,
+                desc=desc or "",
+                tags=tags or "",
+                xml_label=xe_label,
+                xml_clave=xe_clave,
+                total_runs=total_runs,
+                completadas=completadas,
+                en_curso=en_curso,
+                falladas=falladas,
+                ultima_fecha=ultima_fecha,
+                estado_general=estado_general,
+                estado_clave=estado_clave,
+                on_abrir=self.lw.abrir_detalle,
+                on_acciones=self._acciones_exp,
             )
             self.grid.addWidget(card, fila, col)
             col += 1
             if col > 2:
                 col = 0
                 fila += 1
-
-    def _tarjeta_experimento(self, eid, title, desc, tags, modif, xe, runs):
-        from .resumen import ExperimentoCard
-        return ExperimentoCard(
-            eid, title, desc, tags, modif, xe, runs,
-            on_abrir=self.lw.abrir_detalle,
-            on_acciones=self._acciones_exp,
-        )
 
     def _acciones_exp(self, eid):
         m = QMenu(self.lw)
