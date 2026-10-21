@@ -108,6 +108,7 @@ EXPERIMENTO 1:N ESCENARIO
 - `title` (texto, no nulo)
 - `description` (texto)
 - `config_xml_path` (texto)
+- `binary_path` (texto)
 - `created_at` (fecha y hora)
 - `last_modified` (fecha y hora)
 - `tags` (texto, valor por defecto vacio)
