@@ -56,6 +56,7 @@ Todos los datos del usuario se persisten en una base de datos SQLite ubicada en 
 - Visor 2D estilo Studio con slider de frames, reproduccion, control de velocidad, filtro por tipo de celula y filtro por sufriente, y barra de color.
 - Visor 3D para tumores con malla de membrana, radio real, nucleo interior, color por estado/tipo/presion/volumen, leyenda, tres luces suaves, sombreado especular, corte con plano X y seleccion por ID de celula.
 - Visualizaciones globales de resultados y comparaciones lado a lado con sincronizacion de frames.
+- Generacion de video 2D y 3D VTK: exportacion de frames de simulacion a video MP4/WebM (funcionalidad a implementar bajo solicitud; requiere FFmpeg o similar en el sistema).
 
 ### Resultados y reportes
 - Verificacion de integridad por replica.
