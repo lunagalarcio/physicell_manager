@@ -115,8 +115,7 @@ def _renderizar_frame_2d_png(output_dir: str, idx: int, tmp_png: str,
         x, y, rv, rgba = x[mask], y[mask], rv[mask], rgba[mask]
 
     if len(x):
-        patches = [Circle((x_[0], y_[0]), s_[0]) for x_, y_, s_ in
-                   zip(np.atleast_1d(x), np.atleast_1d(y), np.atleast_1d(rv))]
+        patches = [Circle((float(xv), float(yv)), float(rv_)) for xv, yv, rv_ in zip(x, y, rv)]
         col = PatchCollection(patches, facecolor=rgba, edgecolor="black", linewidth=0.5)
         ax.add_collection(col)
 
