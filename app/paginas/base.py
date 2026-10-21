@@ -11,7 +11,7 @@ import logging
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QPushButton,
     QDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSizePolicy, QSpacerItem
+    QHeaderView, QSizePolicy, QSpacerItem, QProgressBar
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -21,7 +21,7 @@ from ..xml_validator import validar_config
 from ..theme_lab import (
     FONDO, LATERAL, TARJETA, BORDE, TEXTO, TEXTO2, LIMA, ROJO,
     VERDE_OK, AMARILLO,
-    ESPACIO_S, ESPACIO_M, ESPACIO_L, ESPACIO_XL,
+    ESPACIO_S, ESPACIO_XS, ESPACIO_M, ESPACIO_L, ESPACIO_XL,
     RADIO_S, RADIO_M, RADIO_L, TAM_BASE, TAM_H1, TAM_H2, TAM_MENOR,
     ESTILO_ESTADO, COLOR_SEVERIDAD,
 )
@@ -285,10 +285,16 @@ class Separador(QFrame):
 
 
 class ExperimentoCard(Tarjeta):
-    """Tarjeta de experimento con información resumida de estado y ejecuciones.
+    """Tarjeta de experimento con el diseño visual solicitado.
 
-    Muestra título, descripción fragmentada, estado del XML, etiquetas,
-    resumen de réplicas y fecha de última ejecución.
+    Orden:
+      1. Encabezado: título + descripción + menú ⋯ (esquina superior derecha)
+      2. Etiquetas + indicador XML
+      3. Separador sutil
+      4. Métricas en dos columnas: RÉPLICAS | ÚLTIMA EJECUCIÓN
+      5. Información inferior: CONFIGURACIÓN + ESTADO
+      6. Progreso (solo si hay réplicas)
+      7. Botón final: Abrir experimento
     """
 
     def __init__(
@@ -312,17 +318,35 @@ class ExperimentoCard(Tarjeta):
     ):
         super().__init__(padre=padre)
         self.eid = eid
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(400)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(420)
 
-        # ---------- Título ----------
+        lay = self.layout_interno()
+        lay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
+        lay.setSpacing(ESPACIO_M)
+
+        # ================================================================
+        # 1. ENCABEZADO: título + descripción + menú ⋯ (esquina superior derecha)
+        # ================================================================
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(ESPACIO_S)
+
         t = QLabel(title or f"Experimento {eid}")
         t.setObjectName("CardTitulo")
         t.setWordWrap(True)
-        t.setMaximumHeight(38)  # Máximo ~2 líneas
-        self.layout_interno().addWidget(t)
+        t.setMaximumHeight(38)
+        header.addWidget(t, 1)
 
-        # ---------- Descripción (fragmento) ----------
+        b_menu = QPushButton("⋯")
+        b_menu.setObjectName("Fantasma")
+        b_menu.setFixedWidth(36)
+        b_menu.setToolTip("Editar / Eliminar")
+        b_menu.clicked.connect(lambda _: on_acciones(eid))
+        header.addWidget(b_menu)
+
+        lay.addLayout(header)
+
         if desc and desc.strip():
             fragmento = desc.strip()
             if len(fragmento) > 110:
@@ -330,94 +354,218 @@ class ExperimentoCard(Tarjeta):
             d = QLabel(fragmento)
             d.setObjectName("CardDesc")
             d.setWordWrap(True)
-            d.setMaximumHeight(44)  # ~2-3 líneas
-            self.layout_interno().addWidget(d)
+            d.setMaximumHeight(44)
+            lay.addWidget(d)
 
-        # ---------- Separador ----------
-        self.layout_interno().addWidget(Separador())
+        # ================================================================
+        # 2. ETIQUETAS + indicador XML
+        # ================================================================
+        fila_tags = QHBoxLayout()
+        fila_tags.setContentsMargins(0, 0, 0, 0)
+        fila_tags.setSpacing(ESPACIO_S)
 
-        # ---------- Fila de estado y XML ----------
-        fila_estado = QHBoxLayout()
-        fila_estado.setContentsMargins(0, 0, 0, 0)
-        fila_estado.setSpacing(ESPACIO_S)
-        b_estado = BadgeEstado(estado_general, estado_clave)
-        fila_estado.addWidget(b_estado)
-        b_xml = BadgeEstado(xml_label, xml_clave)
-        fila_estado.addWidget(b_xml)
-        fila_estado.addStretch()
-        cont_estado = QWidget()
-        cont_estado.setLayout(fila_estado)
-        self.layout_interno().addWidget(cont_estado)
-
-        # ---------- Etiquetas ----------
         if tags and tags.strip():
             lista_tags = [tg.strip() for tg in tags.split(",") if tg.strip()][:4]
-            if lista_tags:
-                fila_tags = QHBoxLayout()
-                fila_tags.setContentsMargins(0, 0, 0, 0)
-                fila_tags.setSpacing(ESPACIO_S)
-                for tag in lista_tags:
-                    bt = QLabel(tag)
-                    bt.setObjectName("BadgeTag")
-                    bt.setStyleSheet(
-                        f"color: {LIMA}; font-weight: 600; font-size: {TAM_MENOR}px; "
-                        f"padding: 2px 6px; border-radius: 4px; "
-                        f"border: 1px solid #3a3a38;"
-                    )
-                    fila_tags.addWidget(bt)
-                fila_tags.addStretch()
-                cont_tags = QWidget()
-                cont_tags.setLayout(fila_tags)
-                self.layout_interno().addWidget(cont_tags)
+            for tag in lista_tags:
+                bt = QLabel(tag)
+                bt.setObjectName("BadgeTag")
+                bt.setStyleSheet(
+                    f"color: {LIMA}; font-weight: 600; font-size: {TAM_MENOR}px; "
+                    f"padding: 2px 6px; border-radius: 4px; "
+                    f"border: 1px solid #3a3a38;"
+                )
+                fila_tags.addWidget(bt)
 
-        # ---------- Resumen de ejecuciones ----------
-        if total_runs > 0:
-            partes = []
-            if completadas:
-                partes.append(
-                    f"<span style='color:{VERDE_OK}'>{completadas} completadas</span>"
-                )
-            if en_curso:
-                partes.append(
-                    f"<span style='color:{AMARILLO}'>{en_curso} en curso</span>"
-                )
-            if falladas:
-                partes.append(
-                    f"<span style='color:{ROJO}'>{falladas} fallidas</span>"
-                )
-            txt_ejec = " · ".join(partes) if partes else f"{total_runs} registro(s)"
-            lbl_ejec = QLabel(txt_ejec)
-            lbl_ejec.setObjectName("CardMeta")
-            lbl_ejec.setWordWrap(True)
-            self.layout_interno().addWidget(lbl_ejec)
-
-            if ultima_fecha:
-                fecha_corta = str(ultima_fecha)[:16]
-                lbl_fecha = QLabel(f"Última ejecución: {fecha_corta}")
-                lbl_fecha.setObjectName("CardMeta")
-                self.layout_interno().addWidget(lbl_fecha)
+        # Indicador XML (discreto, al final de la fila de etiquetas)
+        if xml_label and xml_label != "Sin XML" and xml_label != "Inexistente":
+            xml_ind = QLabel(xml_label)
+            xml_ind.setObjectName("CardXml")
+            xml_ind.setStyleSheet(
+                f"color: {VERDE_OK}; font-weight: 600; font-size: {TAM_MENOR}px; "
+                f"padding: 2px 6px; border-radius: 4px; "
+                f"border: 1px solid {VERDE_OK};"
+            )
         else:
-            lbl_sin = QLabel("Sin ejecuciones")
-            lbl_sin.setObjectName("CardMeta")
-            self.layout_interno().addWidget(lbl_sin)
+            xml_ind = QLabel(xml_label or "Sin XML")
+            xml_ind.setObjectName("CardXml")
+            xml_ind.setStyleSheet(
+                f"color: {TEXTO2}; font-weight: 600; font-size: {TAM_MENOR}px; "
+                f"padding: 2px 6px; border-radius: 4px; "
+                f"border: 1px solid #3a3a38;"
+            )
+        fila_tags.addWidget(xml_ind)
+        fila_tags.addStretch()
 
-        self.layout_interno().addStretch()
+        cont_tags = QWidget()
+        cont_tags.setLayout(fila_tags)
+        lay.addWidget(cont_tags)
 
-        # ---------- Botones ----------
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(ESPACIO_S)
-        b1 = QPushButton("Abrir")
-        b1.setObjectName("Primary")
-        b1.clicked.connect(lambda _: on_abrir(eid))
-        b2 = QPushButton("⋯")
-        b2.setObjectName("Fantasma")
-        b2.setFixedWidth(40)
-        b2.setToolTip("Editar / Eliminar")
-        b2.clicked.connect(lambda _: on_acciones(eid))
-        row.addWidget(b1)
-        row.addWidget(b2)
-        row.addStretch()
-        contenedor = QWidget()
-        contenedor.setLayout(row)
-        self.layout_interno().addWidget(contenedor)
+        # ================================================================
+        # 3. SEPARADOR sutil
+        # ================================================================
+        sep = QFrame()
+        sep.setObjectName("SeparadorSutil")
+        lay.addWidget(sep)
+
+        # ================================================================
+        # 4. MÉTRICAS EN DOS COLUMNAS: RÉPLICAS | ÚLTIMA EJECUCIÓN
+        # ================================================================
+        metricas = QHBoxLayout()
+        metricas.setContentsMargins(0, 0, 0, 0)
+        metricas.setSpacing(ESPACIO_L)
+
+        # Columna izquierda: RÉPLICAS
+        col_rep = QVBoxLayout()
+        col_rep.setContentsMargins(0, 0, 0, 0)
+        col_rep.setSpacing(ESPACIO_XS)
+        lbl_rep_t = QLabel("RÉPLICAS")
+        lbl_rep_t.setObjectName("CardMetricaEtiqueta")
+        col_rep.addWidget(lbl_rep_t)
+
+        if total_runs and total_runs > 0:
+            txt_rep = f"{completadas} / {total_runs}"
+        else:
+            txt_rep = "0 / 0"
+        lbl_rep_v = QLabel(txt_rep)
+        lbl_rep_v.setObjectName("CardMetricaValor")
+        col_rep.addWidget(lbl_rep_v)
+
+        lbl_rep_s = QLabel(
+            f"{completadas} completadas"
+            + (f" · {en_curso} en curso" if en_curso else "")
+            + (f" · {falladas} fallidas" if falladas else "")
+        )
+        lbl_rep_s.setObjectName("CardMetricaEtiqueta")
+        col_rep.addWidget(lbl_rep_s)
+
+        met_izq = QWidget()
+        met_izq.setLayout(col_rep)
+        metricas.addWidget(met_izq, 1)
+
+        # Columna derecha: ÚLTIMA EJECUCIÓN
+        col_ult = QVBoxLayout()
+        col_ult.setContentsMargins(0, 0, 0, 0)
+        col_ult.setSpacing(ESPACIO_XS)
+        lbl_ult_t = QLabel("ÚLTIMA EJECUCIÓN")
+        lbl_ult_t.setObjectName("CardMetricaEtiqueta")
+        col_ult.addWidget(lbl_ult_t)
+
+        if ultima_fecha:
+            try:
+                from datetime import datetime
+                fecha_dt = datetime.fromisoformat(str(ultima_fecha))
+                ahora = datetime.now()
+                diff = ahora - fecha_dt
+                if diff.days > 0:
+                    txt_ult = f"Hace {diff.days} d"
+                elif diff.seconds >= 3600:
+                    txt_ult = f"Hace {diff.seconds // 3600} h"
+                elif diff.seconds >= 60:
+                    txt_ult = f"Hace {diff.seconds // 60} min"
+                else:
+                    txt_ult = "Hace menos de 1 min"
+                fecha_real = fecha_dt.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                txt_ult = "—"
+                fecha_real = str(ultima_fecha)[:16]
+        else:
+            txt_ult = "—"
+            fecha_real = None
+
+        lbl_ult_v = QLabel(txt_ult)
+        lbl_ult_v.setObjectName("CardMetricaValor")
+        col_ult.addWidget(lbl_ult_v)
+
+        if fecha_real:
+            lbl_ult_s = QLabel(fecha_real)
+            lbl_ult_s.setObjectName("CardMetricaEtiqueta")
+            col_ult.addWidget(lbl_ult_s)
+
+        met_der = QWidget()
+        met_der.setLayout(col_ult)
+        metricas.addWidget(met_der, 1)
+
+        lay.addLayout(metricas)
+
+        # ================================================================
+        # 5. INFORMACIÓN INFERIOR: CONFIGURACIÓN + ESTADO
+        # ================================================================
+        info = QHBoxLayout()
+        info.setContentsMargins(0, 0, 0, 0)
+        info.setSpacing(ESPACIO_L)
+
+        # CONFIGURACIÓN
+        col_cfg = QVBoxLayout()
+        col_cfg.setContentsMargins(0, 0, 0, 0)
+        col_cfg.setSpacing(ESPACIO_XS)
+        lbl_cfg_t = QLabel("CONFIGURACIÓN")
+        lbl_cfg_t.setObjectName("CardMetricaEtiqueta")
+        col_cfg.addWidget(lbl_cfg_t)
+
+        xml_nombre = ""
+        if xml_label and xml_label not in ("Sin XML", "Inexistente"):
+            try:
+                xml_nombre = os.path.basename(xml_label)
+            except Exception:
+                xml_nombre = xml_label
+        lbl_cfg_v = QLabel(xml_nombre or "Sin XML asignado")
+        lbl_cfg_v.setObjectName("CardMeta")
+        lbl_cfg_v.setWordWrap(True)
+        col_cfg.addWidget(lbl_cfg_v)
+
+        cfg_w = QWidget()
+        cfg_w.setLayout(col_cfg)
+        info.addWidget(cfg_w, 1)
+
+        # ESTADO
+        col_est = QVBoxLayout()
+        col_est.setContentsMargins(0, 0, 0, 0)
+        col_est.setSpacing(ESPACIO_XS)
+        lbl_est_t = QLabel("ESTADO")
+        lbl_est_t.setObjectName("CardMetricaEtiqueta")
+        col_est.addWidget(lbl_est_t)
+
+        color_estado = {
+            "en_ejecucion": AMARILLO,
+            "con_errores": ROJO,
+            "completado": VERDE_OK,
+            "configurado": LIMA,
+            "sin_configurar": TEXTO2,
+        }.get(estado_clave, TEXTO2)
+
+        lbl_est_v = QLabel(estado_general)
+        lbl_est_v.setObjectName("CardEstadoValor")
+        lbl_est_v.setStyleSheet(f"color: {color_estado};")
+        col_est.addWidget(lbl_est_v)
+
+        est_w = QWidget()
+        est_w.setLayout(col_est)
+        info.addWidget(est_w, 1)
+
+        lay.addLayout(info)
+
+        # ================================================================
+        # 6. PROGRESO (solo si hay réplicas válidas)
+        # ================================================================
+        if total_runs and total_runs > 0:
+            porcentaje = int((completadas / total_runs) * 100)
+            lbl_prog = QLabel(f"{porcentaje}% completado")
+            lbl_prog.setObjectName("CardMeta")
+            lay.addWidget(lbl_prog)
+
+            pb = QProgressBar()
+            pb.setObjectName("ProgresoReplicas")
+            pb.setRange(0, 100)
+            pb.setValue(porcentaje)
+            pb.setTextVisible(False)
+            lay.addWidget(pb)
+
+        # ================================================================
+        # 7. ACCIÓN FINAL: botón Abrir experimento
+        # ================================================================
+        b_abrir = QPushButton("Abrir experimento")
+        b_abrir.setObjectName("CardAccion")
+        b_abrir.setCursor(Qt.CursorShape.PointingHandCursor)
+        b_abrir.clicked.connect(lambda _: on_abrir(eid))
+        lay.addWidget(b_abrir)
+

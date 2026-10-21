@@ -131,7 +131,73 @@ QLabel#CardMeta {{
     color: {TEXTO2};
     font-size: 10px;
 }}
-QLabel#KpiNum {{
+
+/* ---------- Tarjetas de experimento ---------- */
+QLabel#CardTitulo {{
+    color: {TEXTO};
+    font-size: 15px;
+    font-weight: 700;
+}}
+QLabel#CardDesc {{
+    color: {TEXTO2};
+    font-size: 11px;
+}}
+QLabel#CardMeta {{
+    color: {TEXTO2};
+    font-size: 10px;
+}}
+QLabel#CardMetricaValor {{
+    color: {TEXTO};
+    font-size: 16px;
+    font-weight: 700;
+}}
+QLabel#CardMetricaEtiqueta {{
+    color: {TEXTO2};
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+}}
+QLabel#CardXml {{
+    color: {VERDE_OK};
+    font-size: 10px;
+    font-weight: 600;
+}}
+QLabel#CardEstado {{
+    color: {TEXTO2};
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}}
+QLabel#CardEstadoValor {{
+    font-size: 11px;
+    font-weight: 600;
+}}
+QLabel#CardAccion {{
+    color: #1a2e05;
+    font-weight: 700;
+    font-size: {TAM_BASE}px;
+}}
+
+QFrame#SeparadorSutil {{
+    background-color: {BORDE};
+    max-height: 1px;
+    border: none;
+    margin: 0;
+}}
+
+QProgressBar#ProgresoReplicas {{
+    background: #232323;
+    border: none;
+    border-radius: 3px;
+    text-align: center;
+    color: {TEXTO2};
+    height: 6px;
+    font-size: 9px;
+}}
+QProgressBar#ProgresoReplicas::chunk {{
+    background-color: {LIMA};
+    border-radius: 3px;
+}}
     color: {TEXTO};
     font-size: {TAM_KPI}px;
     font-weight: 700;
