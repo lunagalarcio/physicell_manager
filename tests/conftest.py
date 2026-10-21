@@ -8,6 +8,11 @@ import sys
 import tempfile
 import sqlite3
 
+# Forzar backend de matplotlib sin display antes de importar cualquier
+# módulo que lo use (evita cuelgues en CI sin entorno gráfico).
+import matplotlib
+matplotlib.use("Agg")
+
 import pytest
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,6 +28,9 @@ CREATE TABLE IF NOT EXISTS experiments (
     title TEXT NOT NULL,
     description TEXT,
     config_xml_path TEXT,
+    binary_path TEXT,
+    custom_cpp_path TEXT,
+    custom_h_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_modified DATETIME,
     tags TEXT DEFAULT ''
@@ -45,6 +53,17 @@ CREATE TABLE IF NOT EXISTS escenarios (
     config_xml_path TEXT,
     parametros_json TEXT DEFAULT '{}',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+);
+CREATE TABLE IF NOT EXISTS videos (
+    id INTEGER PRIMARY KEY,
+    experiment_id INTEGER,
+    run_number INTEGER,
+    tipo TEXT DEFAULT '2d',
+    ruta_archivo TEXT,
+    fps INTEGER DEFAULT 1,
+    frames INTEGER DEFAULT 0,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (experiment_id) REFERENCES experiments(id)
 );
 """
