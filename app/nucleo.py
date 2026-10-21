@@ -113,6 +113,7 @@ def init_database():
             description TEXT,
             config_xml_path TEXT,
             binary_path TEXT,
+            custom_cpp_path TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_modified DATETIME
         )
@@ -146,6 +147,10 @@ def init_database():
         pass
     try:
         cur.execute("ALTER TABLE experiments ADD COLUMN binary_path TEXT")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE experiments ADD COLUMN custom_cpp_path TEXT")
     except Exception:
         pass
     try:
