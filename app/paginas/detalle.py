@@ -34,11 +34,32 @@ class PaginaDetalle(PaginaBase):
         self.worker = None
         self.tabs_widget = None
 
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._clear_layout(item.layout())
+
     def build(self, eid):
         self.current_experiment_id = eid
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
-        lay.setSpacing(ESPACIO_M)
+
+        # Si ya tiene layout (build llamado más de una vez), limpiarlo antes de reconstruir
+        layout = self.layout()
+        if layout is None:
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+            layout.setSpacing(ESPACIO_M)
+        else:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+                elif item.layout():
+                    self._clear_layout(item.layout())
+
+        lay = layout
 
         # ---------- Encabezado del experimento ----------
         conn = self.conn()
