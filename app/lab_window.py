@@ -63,7 +63,7 @@ class LabWindow(QMainWindow):
         self.stack = QStackedWidget()
         self._secciones = [
             "Resumen", "Experimentos", "Configuraciones", "Ejecuciones", "Visualización",
-            "Resultados", "Comparación", "Reportes", "Preferencias",
+            "Resultados", "Comparación", "Reportes", "Ajustes",
         ]
         for i, name in enumerate(self._secciones):
             b = QPushButton(name)
@@ -89,7 +89,7 @@ class LabWindow(QMainWindow):
             ("Resultados", PaginaResultados),
             ("Comparación", PaginaComparacion),
             ("Reportes", PaginaReportes),
-            ("Preferencias", PaginaPreferencias),
+            ("Ajustes", PaginaPreferencias),
         ]:
             pagina = cls(self)
             pagina.build()
@@ -120,6 +120,91 @@ class LabWindow(QMainWindow):
         for b in self.nav_btns.values():
             b.setChecked(False)
         self.nav_btns["Experimentos"].setChecked(True)
+
+    def abrir_comparacion(self, experiment_ids):
+        """Abre un diálogo para comparar múltiples experimentos entre sí."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
+        from PyQt6.QtCore import Qt
+        import sqlite3
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Comparación de experimentos")
+        dlg.setMinimumWidth(700)
+        dlg.setMinimumHeight(400)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(16)
+
+        h = QLabel("Comparación entre experimentos")
+        h.setObjectName("H1")
+        lay.addWidget(h)
+
+        sub = QLabel("Selecciona un experimento para abrir su detalle y ver los resultados.")
+        sub.setObjectName("Muted")
+        sub.setWordWrap(True)
+        lay.addWidget(sub)
+
+        from .nucleo import get_db_path
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+
+        for eid in experiment_ids:
+            try:
+                cur.execute("SELECT title, config_xml_path FROM experiments WHERE id=?", (eid,))
+                row = cur.fetchone()
+                title = row[0] if row else f"Experimento {eid}"
+                cfg = row[1] if row else ""
+            except Exception:
+                title = f"Experimento {eid}"
+                cfg = ""
+
+            try:
+                cur.execute(
+                    "SELECT COUNT(*), SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END), "
+                    "SUM(CASE WHEN status='running' THEN 1 ELSE 0 END), "
+                    "SUM(CASE WHEN status IN ('failed','cancelled') THEN 1 ELSE 0 END) "
+                    "FROM runs WHERE experiment_id=?",
+                    (eid,),
+                )
+                stats = cur.fetchone()
+                total = stats[0] or 0
+                comp = stats[1] or 0
+                run = stats[2] or 0
+                fail = stats[3] or 0
+            except Exception:
+                total = comp = run = fail = 0
+
+            fila = QFrame()
+            fila.setObjectName("Card")
+            fila_lay = QHBoxLayout(fila)
+            fila_lay.setContentsMargins(16, 12, 16, 12)
+            fila_lay.setSpacing(12)
+
+            lbl_info = QLabel(
+                f"<b>#{eid} {title}</b><br>"
+                f"<span style='color:#A6A6A6'>Réplicas: {total} | "
+                f"Completadas: {comp} | En curso: {run} | Fallidas: {fail}</span>"
+            )
+            lbl_info.setWordWrap(True)
+            fila_lay.addWidget(lbl_info, 1)
+
+            btn_abrir = QPushButton("Abrir detalle")
+            btn_abrir.setObjectName("Primary")
+            btn_abrir.clicked.connect(lambda _=False, e=eid: (dlg.accept(), self.abrir_detalle(e)))
+            fila_lay.addWidget(btn_abrir)
+
+            lay.addWidget(fila)
+
+        conn.close()
+
+        lay.addStretch()
+
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.setObjectName("Secondary")
+        btn_cerrar.clicked.connect(dlg.reject)
+        lay.addWidget(btn_cerrar)
+
+        dlg.exec()
 
     def refrescar_detalle(self):
         if self.current_experiment_id is not None:

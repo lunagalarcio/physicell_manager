@@ -1,4 +1,4 @@
-"""Página de Preferencias: rutas del motor PhysiCell y suite de regresión."""
+"""Página de Ajustes: rutas del motor PhysiCell y suite de regresión."""
 import os
 import subprocess as _sp
 import sys
@@ -21,7 +21,7 @@ class PaginaPreferencias(PaginaBase):
         lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
         lay.setSpacing(ESPACIO_M)
 
-        lay.addWidget(Seccion("Preferencias", "Rutas del motor PhysiCell y utilidades de calidad."))
+        lay.addWidget(Seccion("Ajustes", "Rutas del motor PhysiCell y utilidades de calidad."))
 
         self.root_edit = QLineEdit("")
         self.root_edit.setPlaceholderText("Carpeta raíz de PhysiCell (motor externo)")
