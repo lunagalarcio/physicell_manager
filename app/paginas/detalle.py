@@ -457,6 +457,22 @@ class PaginaDetalle(PaginaBase):
         return w
 
     def _ejecutar(self):
+        try:
+            self._ejecutar_interno()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            self.btn_run.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.run_log.append(f"ERROR CRÍTICO: {e}")
+            QMessageBox.critical(
+                self.lw,
+                "Error durante la ejecución",
+                f"Ocurrió un error inesperado al intentar iniciar la simulación:\n\n{e}\n\n"
+                f"Detalles técnicos:\n{tb[-1500:]}",
+            )
+
+    def _ejecutar_interno(self):
         eid = self.current_experiment_id
         base = self.cfg_xml.text().strip() if hasattr(self, "cfg_xml") else ""
         if not base:
@@ -514,6 +530,11 @@ class PaginaDetalle(PaginaBase):
         self.run_log.append(f"Detenido/error: {msg}")
         self.btn_run.setEnabled(True)
         self.btn_stop.setEnabled(False)
+        QMessageBox.warning(
+            self.lw,
+            "Error de ejecución",
+            f"La simulación se detuvo con un error:\n\n{msg}",
+        )
 
     def _detener(self):
         if self.worker and self.worker.isRunning():
