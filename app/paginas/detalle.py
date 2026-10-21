@@ -425,6 +425,12 @@ class PaginaDetalle(PaginaBase):
         n = self.run_reps.value()
         exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
         self.lw._last_exe = exe
+        if not exe or not os.path.isfile(exe):
+            QMessageBox.warning(
+                self.lw, "Ejecución",
+                "Configura el Motor PhysiCell (project.exe) en la pestaña Configuración y guárdalo antes de ejecutar."
+            )
+            return
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.run_log.append(f"Iniciando {n} réplicas con PhysiCell...")
