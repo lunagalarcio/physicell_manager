@@ -157,7 +157,45 @@ def init_database():
         cur.execute("ALTER TABLE runs ADD COLUMN escenario_id INTEGER")
     except Exception:
         pass
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS videos (
+                id INTEGER PRIMARY KEY,
+                experiment_id INTEGER,
+                run_number INTEGER,
+                tipo TEXT DEFAULT '2d',
+                ruta_archivo TEXT,
+                fps INTEGER DEFAULT 1,
+                frames INTEGER DEFAULT 0,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+            )
+        """)
+    except Exception:
+        pass
     conn.commit()
     conn.close()
     print(f"DB inicializada: {db_path}")
     return db_path
+
+
+def registrar_video(conn, experiment_id, run_number, tipo="2d", ruta_archivo="", fps=1, frames=0):
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO videos (experiment_id, run_number, tipo, ruta_archivo, fps, frames) VALUES (?,?,?,?,?,?)",
+        (experiment_id, run_number, tipo, ruta_archivo, fps, frames),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def listar_videos(conn, experiment_id):
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, run_number, tipo, ruta_archivo, fps, frames, creado_en FROM videos WHERE experiment_id=? ORDER BY id DESC",
+            (experiment_id,),
+        )
+        return cur.fetchall()
+    except Exception:
+        return []

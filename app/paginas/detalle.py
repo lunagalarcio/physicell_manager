@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog,
     QMessageBox, QSpinBox, QTextEdit, QProgressBar, QStackedWidget, QButtonGroup,
     QComboBox, QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
-    QGridLayout, QDialog, QFormLayout, QDialogButtonBox, QSizePolicy, QFrame, QWidget
+    QGridLayout, QDialog, QFormLayout, QDialogButtonBox, QSizePolicy, QFrame, QWidget,
+    QApplication, QInputDialog
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QTimer
@@ -23,6 +24,7 @@ from ..xml_validator import validar_config, validar_texto
 from ..motor_physicell import MotorPhysiCell
 from ..visor_widget import VisorPhysiCell
 from ..visor3d_vtk import abrir_vtk
+from ..exportacion import generar_video_2d, generar_video_3d_vtk
 
 
 class PaginaDetalle(PaginaBase):
@@ -518,6 +520,16 @@ class PaginaDetalle(PaginaBase):
         top.addWidget(b_ref)
         top.addWidget(b_rst)
         top.addWidget(b_vtk)
+        b_vid2 = QPushButton("Video 2D")
+        b_vid2.setObjectName("Secondary")
+        b_vid2.setToolTip("Generar video MP4 2D de los frames de la réplica seleccionada (requiere ffmpeg)")
+        b_vid2.clicked.connect(lambda: self._generar_video("2d"))
+        b_vid3 = QPushButton("Video 3D (VTK)")
+        b_vid3.setObjectName("Secondary")
+        b_vid3.setToolTip("Generar video MP4 3D con PyVista/VTK de los frames de la réplica seleccionada (requiere ffmpeg)")
+        b_vid3.clicked.connect(lambda: self._generar_video("3d"))
+        top.addWidget(b_vid2)
+        top.addWidget(b_vid3)
         bar = QFrame()
         bar.setLayout(top)
         v.addWidget(bar)
@@ -526,6 +538,28 @@ class PaginaDetalle(PaginaBase):
         v.addWidget(self.visor, 1)
         self.vis_mode.currentTextChanged.connect(self._vis_modo)
         self._vis_cargar()
+
+        # ---------- Sección: videos generados ----------
+        vv = QVBoxLayout()
+        vv.addWidget(QLabel("<b>Videos generados para este experimento</b>"))
+        self.tbl_videos = QTableWidget()
+        self.tbl_videos.setColumnCount(6)
+        self.tbl_videos.setHorizontalHeaderLabels(["Run", "Tipo", "FPS", "Frames", "Archivo", "Creado"])
+        self.tbl_videos.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tbl_videos.setMaximumHeight(120)
+        vv.addWidget(self.tbl_videos)
+        row_v = QHBoxLayout()
+        b_ref_v = QPushButton("Actualizar lista")
+        b_ref_v.setObjectName("Secondary")
+        b_ref_v.clicked.connect(self._refrescar_videos)
+        row_v.addWidget(b_ref_v)
+        row_v.addStretch()
+        cvv = QFrame()
+        cvv.setLayout(row_v)
+        vv.addWidget(cvv)
+        v.addLayout(vv)
+
+        self._refrescar_videos()
         return w
 
     def _abrir_vtk_detalle(self):
@@ -543,6 +577,74 @@ class PaginaDetalle(PaginaBase):
         r = cur.fetchone()
         conn.close()
         abrir_vtk(self.lw, d or "", titulo=f"Tumor 3D — {(r[0] if r else '') or self.current_experiment_id}")
+
+    def _refrescar_videos(self):
+        from ..nucleo import listar_videos, get_db_path
+        conn = sqlite3.connect(get_db_path())
+        rows = listar_videos(conn, self.current_experiment_id)
+        conn.close()
+        self.tbl_videos.setRowCount(len(rows))
+        for i, (vid, run_num, tipo, ruta, fps, frames, creado) in enumerate(rows):
+            self.tbl_videos.setItem(i, 0, QTableWidgetItem(str(run_num)))
+            self.tbl_videos.setItem(i, 1, QTableWidgetItem(tipo))
+            self.tbl_videos.setItem(i, 2, QTableWidgetItem(str(fps)))
+            self.tbl_videos.setItem(i, 3, QTableWidgetItem(str(frames)))
+            self.tbl_videos.setItem(i, 4, QTableWidgetItem(ruta or ""))
+            self.tbl_videos.setItem(i, 5, QTableWidgetItem(str(creado) if creado else ""))
+
+    def _generar_video(self, tipo: str):
+        eid = self.current_experiment_id
+        outs = self._salidas_replicas(eid)
+        i = self.vis_rep.currentIndex()
+        if not outs or i < 0 or i >= len(outs):
+            QMessageBox.warning(self.lw, "Video", "Selecciona una réplica con salida válida.")
+            return
+        lbl, output_dir = outs[i]
+        if not output_dir or not os.path.isdir(output_dir):
+            QMessageBox.warning(self.lw, "Video", "La réplica seleccionada no tiene carpeta de salida.")
+            return
+
+        from PyQt6.QtWidgets import QInputDialog, QFileDialog
+        fps, ok = QInputDialog.getInt(
+            self.lw, "FPS del video", "Frames por segundo:", 1, 1, 60, 1
+        )
+        if not ok:
+            return
+        salida, _ = QFileDialog.getSaveFileName(
+            self.lw, f"Guardar video {tipo.upper()}", f"video_{tipo}_{lbl.replace(' ', '_')}.mp4",
+            "MP4 (*.mp4)"
+        )
+        if not salida:
+            return
+
+        self.run_log.append(f"Generando video {tipo.upper()} con {fps} FPS...")
+        QApplication.processEvents()
+
+        if tipo == "2d":
+            r = generar_video_2d(output_dir, salida, fps=fps)
+        else:
+            r = generar_video_3d_vtk(output_dir, salida, fps=fps)
+
+        if r.get("ok"):
+            conn = self.conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT run_number FROM runs WHERE experiment_id=? AND output_dir=? ORDER BY run_number DESC LIMIT 1",
+                (eid, output_dir),
+            )
+            row = cur.fetchone()
+            run_num = row[0] if row else 0
+            conn.close()
+            from ..nucleo import registrar_video, get_db_path
+            conn2 = sqlite3.connect(get_db_path())
+            registrar_video(conn2, eid, run_num, tipo=tipo, ruta_archivo=salida, fps=fps, frames=r.get("frames", 0))
+            conn2.close()
+            self.run_log.append(f"Video {tipo.upper()} generado: {salida} ({r.get('frames', 0)} frames)")
+            self._refrescar_videos()
+            QMessageBox.information(self.lw, "Video", f"Video {tipo.upper()} generado:\n{salida}")
+        else:
+            self.run_log.append(f"Error video {tipo.upper()}: {r.get('error')}")
+            QMessageBox.warning(self.lw, "Video", r.get("error", "Error desconocido"))
 
     def _salidas_replicas(self, eid):
         conn = self.conn()
