@@ -561,11 +561,17 @@ class ExperimentoCard(Tarjeta):
             lay.addWidget(pb)
 
         # ================================================================
-        # 7. ACCIÓN FINAL: botón Abrir experimento
+        # 7. ACCIÓN FINAL: botón Abrir experimento (alineado a la izquierda)
         # ================================================================
+        fila_accion = QHBoxLayout()
+        fila_accion.setContentsMargins(0, 0, 0, 0)
         b_abrir = QPushButton("Abrir experimento")
         b_abrir.setObjectName("CardAccion")
         b_abrir.setCursor(Qt.CursorShape.PointingHandCursor)
         b_abrir.clicked.connect(lambda _: on_abrir(eid))
-        lay.addWidget(b_abrir)
+        fila_accion.addWidget(b_abrir)
+        fila_accion.addStretch()
+        contenedor_accion = QWidget()
+        contenedor_accion.setLayout(fila_accion)
+        lay.addWidget(contenedor_accion)
 
