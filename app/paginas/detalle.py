@@ -512,12 +512,25 @@ class PaginaDetalle(PaginaBase):
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.run_log.append(f"Iniciando {n} réplicas con PhysiCell...")
-        from ..nucleo import ReplicaWorker, get_db_path
-        self.worker = ReplicaWorker(eid, base, n, exe, get_db_path())
-        self.worker.prog.connect(lambda v, t: (self.run_prog.setValue(v), self.run_log.append(t)))
-        self.worker.done.connect(self._run_done)
-        self.worker.fail.connect(self._run_fail)
-        self.worker.start()
+        try:
+            from ..nucleo import ReplicaWorker, get_db_path
+            self.worker = ReplicaWorker(eid, base, n, exe, get_db_path())
+            self.worker.prog.connect(lambda v, t: (self.run_prog.setValue(v), self.run_log.append(t)))
+            self.worker.done.connect(self._run_done)
+            self.worker.fail.connect(self._run_fail)
+            self.worker.start()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            self.btn_run.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.run_log.append(f"ERROR al iniciar worker: {e}")
+            QMessageBox.critical(
+                self.lw,
+                "Error al iniciar simulación",
+                f"No se pudo iniciar el worker de réplicas:\n\n{e}\n\n"
+                f"Detalles técnicos:\n{tb[-2000:]}",
+            )
 
     def _run_done(self, info):
         self.run_prog.setValue(100)
@@ -530,6 +543,8 @@ class PaginaDetalle(PaginaBase):
         self.run_log.append(f"Detenido/error: {msg}")
         self.btn_run.setEnabled(True)
         self.btn_stop.setEnabled(False)
+        # También imprimir a consola para debugging
+        print(f"[ERROR WORKER] {msg}")
         QMessageBox.warning(
             self.lw,
             "Error de ejecución",

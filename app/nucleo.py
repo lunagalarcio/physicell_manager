@@ -7,6 +7,7 @@ solo presentan. El motor de simulación sigue siendo exclusivamente PhysiCell.
 import os
 import sys
 import sqlite3
+import traceback
 from PyQt6.QtCore import QThread, pyqtSignal
 from .simulador import generar_replica_config, registrar_run, actualizar_run
 from .motor_physicell import MotorPhysiCell
@@ -74,8 +75,9 @@ class ReplicaWorker(QThread):
             conn.close()
             self.done.emit({"experiment_id": self.experiment_id, "replicas": self.n_replicas})
         except Exception as e:
+            tb = traceback.format_exc()
             try:
-                self.fail.emit(str(e))
+                self.fail.emit(f"{e}\n\n{tb}")
             except Exception:
                 pass
 
