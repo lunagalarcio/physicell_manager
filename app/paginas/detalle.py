@@ -543,15 +543,13 @@ class PaginaDetalle(PaginaBase):
     def _vis_modo(self, modo):
         try:
             if modo == "2D":
-                self.visor.ax2.set_visible(True)
-                self.visor.ax3.set_visible(False)
+                self.visor.tabs_vis.setCurrentIndex(0)
             elif modo == "3D":
-                self.visor.ax2.set_visible(False)
-                self.visor.ax3.set_visible(True)
+                self.visor.tabs_vis.setCurrentIndex(1)
             else:
-                self.visor.ax2.set_visible(True)
-                self.visor.ax3.set_visible(True)
-            self.visor.canvas.draw()
+                self.visor.tabs_vis.setCurrentIndex(0)
+            self.visor.canvas2.draw()
+            self.visor.canvas3.draw()
         except Exception:
             pass
 

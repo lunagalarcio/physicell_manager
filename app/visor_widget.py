@@ -9,7 +9,7 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 from collections import deque
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget
 from PyQt6.QtCore import Qt
 import matplotlib
 matplotlib.use("QtAgg")
@@ -294,12 +294,18 @@ class VisorPhysiCell(QWidget):
         self.lbl_leyenda = QLabel("")
         self.lbl_leyenda.setWordWrap(True)
         lay.addWidget(self.lbl_leyenda)
-        self.fig = Figure(figsize=(8, 3.8))
-        self.ax2 = self.fig.add_subplot(121)
-        self.ax3 = self.fig.add_subplot(122, projection="3d")
-        self.canvas = FigureCanvasQTAgg(self.fig)
+        # ---- pestañas 2D y 3D separadas ----
+        self.tabs_vis = QTabWidget()
+        self.fig2 = Figure(figsize=(6, 3.8))
+        self.ax2 = self.fig2.add_subplot(111)
+        self.canvas2 = FigureCanvasQTAgg(self.fig2)
+        self.fig3 = Figure(figsize=(6, 3.8))
+        self.ax3 = self.fig3.add_subplot(111, projection="3d")
+        self.canvas3 = FigureCanvasQTAgg(self.fig3)
+        self.tabs_vis.addTab(self.canvas2, "2D")
+        self.tabs_vis.addTab(self.canvas3, "3D")
         self._cbar = None
-        lay.addWidget(self.canvas, 1)
+        lay.addWidget(self.tabs_vis, 1)
         bot = QHBoxLayout()
         self.btn_prev = QPushButton("<")
         self.btn_prev.setFixedWidth(40)
@@ -451,7 +457,7 @@ class VisorPhysiCell(QWidget):
             self.lbl_leyenda.setText("")
             self.ax2.set_title("2D estilo Studio - sin datos")
             self.ax3.set_title("3D - sin datos")
-            self.canvas.draw()
+            self.canvas2.draw(); self.canvas3.draw()
             return
         idx = max(0, min(len(self.snaps) - 1, self.slider.value()))
         d = self._datos_frame(idx)
@@ -459,7 +465,7 @@ class VisorPhysiCell(QWidget):
             return
         if not d.get("ok"):
             self.lbl.setText(f"Error: {d.get('error')}")
-            self.canvas.draw()
+            self.canvas2.draw(); self.canvas3.draw()
             return
         idx = d["idx"]
         x, y, rv, rgba = d["x"], d["y"], d["rv"], d["rgba"]
@@ -519,5 +525,6 @@ class VisorPhysiCell(QWidget):
             self.lbl_leyenda.setText("Leyenda tipos: " + ", ".join(f"{k} ({v})" for k, v in sorted(conteo.items())))
         except Exception:
             self.lbl_leyenda.setText("")
-        self.fig.tight_layout()
-        self.canvas.draw()
+        self.fig2.tight_layout()
+        self.fig3.tight_layout()
+        self.canvas2.draw(); self.canvas3.draw()
