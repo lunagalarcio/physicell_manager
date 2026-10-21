@@ -39,6 +39,7 @@ Todos los datos del usuario se persisten en una base de datos SQLite ubicada en 
 ### Gestión de experimentos
 - Creacion, edicion y eliminacion de tarjetas de experimento con titulo, descripcion y etiquetas (tags).
 - Asociacion de un archivo `PhysiCell_settings.xml` a cada experimento.
+- Asociacion de la ruta al binario del motor (`binary_path`) para ejecutar simulaciones por experimento.
 - Control de versiones implicito mediante fecha de creacion y fecha de ultima modificacion.
 
 ### Configuración y validación XML

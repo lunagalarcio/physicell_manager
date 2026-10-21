@@ -112,6 +112,7 @@ def init_database():
             title TEXT NOT NULL,
             description TEXT,
             config_xml_path TEXT,
+            binary_path TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_modified DATETIME
         )
@@ -141,6 +142,10 @@ def init_database():
     """)
     try:
         cur.execute("ALTER TABLE experiments ADD COLUMN tags TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE experiments ADD COLUMN binary_path TEXT")
     except Exception:
         pass
     try:
