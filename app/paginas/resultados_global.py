@@ -1,32 +1,38 @@
 """Página global de Resultados: selector de experimento para abrir su detalle."""
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QComboBox, QPushButton
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QComboBox
 
-from .base import PaginaBase
+from .base import (
+    PaginaBase, Seccion, Tarjeta, ESPACIO_M,
+)
 
 
 class PaginaResultados(PaginaBase):
     def build(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 20)
-        h = QLabel("Resultados")
-        h.setObjectName("H1")
-        lay.addWidget(h)
-        d = QLabel(
-            "Selecciona un experimento para ver métricas, archivos y exportaciones. "
-            "El detalle por experimento está en Experimentos → Abrir → Resultados."
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
+
+        lay.addWidget(
+            Seccion(
+                "Resultados",
+                "Selecciona un experimento para ver métricas, archivos y exportaciones. "
+                "El detalle por experimento está en Experimentos → Abrir → Resultados.",
+            )
         )
-        d.setObjectName("Muted")
-        d.setWordWrap(True)
-        lay.addWidget(d)
+
         self.exp_combo = QComboBox()
-        lay.addWidget(self.exp_combo)
+        tarjeta = Tarjeta()
+        tarjeta.add(self.exp_combo)
+
         btn = QPushButton("Abrir resultados del experimento")
         btn.setObjectName("Primary")
         btn.clicked.connect(self._abrir)
-        lay.addWidget(btn)
+        tarjeta.add(btn)
+
+        lay.addWidget(tarjeta)
         lay.addStretch()
-        self.refrescar()
+
+        self._cargar_exps()
         return self
 
     def refrescar(self):
@@ -37,12 +43,12 @@ class PaginaResultados(PaginaBase):
         cur = conn.cursor()
         try:
             cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            rows = cur.fetchall()
+            filas = cur.fetchall()
         except Exception:
-            rows = []
+            filas = []
         conn.close()
         self.exp_combo.clear()
-        for eid, title in rows:
+        for eid, title in filas:
             self.exp_combo.addItem(f"#{eid} {title}", eid)
 
     def _abrir(self):

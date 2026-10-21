@@ -9,7 +9,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from .base import PaginaBase, xml_estado
+from .base import (
+    PaginaBase, Seccion, Tarjeta, TablaBase, xml_estado, DialogoBase,
+    ESPACIO_M, ESPACIO_L,
+)
 from ..config_manager import importar_config, leer_texto, guardar_texto
 from ..xml_validator import validar_config as vc
 
@@ -17,19 +20,18 @@ from ..xml_validator import validar_config as vc
 class PaginaConfiguraciones(PaginaBase):
     def build(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 20)
-        lay.setSpacing(8)
-        h = QLabel("Configuraciones")
-        h.setObjectName("H1")
-        lay.addWidget(h)
-        d = QLabel(
-            "Biblioteca de XML de PhysiCell: importa, edita y valida sin listas "
-            "rígidas de parámetros. Asocia un XML a un experimento o escenario."
-        )
-        d.setObjectName("Muted")
-        d.setWordWrap(True)
-        lay.addWidget(d)
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
 
+        lay.addWidget(
+            Seccion(
+                "Configuraciones",
+                "Biblioteca de XML de PhysiCell: importa, edita y valida sin listas "
+                "rígidas de parámetros. Asocia un XML a un experimento o escenario.",
+            )
+        )
+
+        # Barra de acciones
         row = QHBoxLayout()
         b_imp = QPushButton("Importar XML…")
         b_imp.setObjectName("Primary")
@@ -48,12 +50,13 @@ class PaginaConfiguraciones(PaginaBase):
         bar.setLayout(row)
         lay.addWidget(bar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Archivo", "Estado", "Tamaño"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        lay.addWidget(self.table, 1)
+        # Tabla de archivos
+        self.table = TablaBase(["Archivo", "Estado", "Tamaño"])
+        tarjeta = Tarjeta()
+        tarjeta.add(self.table)
+        lay.addWidget(tarjeta, 1)
 
+        # Botones secundarios
         row2 = QHBoxLayout()
         b_ed = QPushButton("Editar…")
         b_ed.setObjectName("Secondary")
@@ -75,7 +78,6 @@ class PaginaConfiguraciones(PaginaBase):
         self.refrescar()
         return self
 
-    # ---------- helpers ----------
     def _dir(self):
         d = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config")
         os.makedirs(d, exist_ok=True)
@@ -88,19 +90,12 @@ class PaginaConfiguraciones(PaginaBase):
         it = self.table.item(r, 0)
         return it.text() if it else ""
 
-    # ---------- acciones ----------
     def refrescar(self):
         files = sorted(_g.glob(os.path.join(self._dir(), "*.xml")))
-        self.table.setRowCount(len(files))
-        for i, p in enumerate(files):
-            xe, _ = xml_estado(p)
-            try:
-                sz = str(os.path.getsize(p))
-            except Exception:
-                sz = "?"
-            self.table.setItem(i, 0, QTableWidgetItem(p))
-            self.table.setItem(i, 1, QTableWidgetItem(xe))
-            self.table.setItem(i, 2, QTableWidgetItem(sz))
+        self.table.cargar([
+            [p, xml_estado(p)[0], str(os.path.getsize(p)) if os.path.isfile(p) else "?"]
+            for p in files
+        ])
 
     def _importar(self):
         src, _ = QFileDialog.getOpenFileName(self, "Importar XML", "", "XML (*.xml)")
@@ -148,6 +143,8 @@ class PaginaConfiguraciones(PaginaBase):
         ed.setPlainText(txt)
         lay.addWidget(ed)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Save).setObjectName("Primary")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
         lay.addWidget(btns)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
@@ -181,11 +178,11 @@ class PaginaConfiguraciones(PaginaBase):
         cur = conn.cursor()
         try:
             cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            rows = cur.fetchall()
+            filas = cur.fetchall()
         except Exception:
-            rows = []
+            filas = []
         conn.close()
-        if not rows:
+        if not filas:
             QMessageBox.warning(self, "Configuraciones", "No hay experimentos. Crea uno primero.")
             return
         dlg = QDialog(self)
@@ -193,10 +190,12 @@ class PaginaConfiguraciones(PaginaBase):
         lay = QVBoxLayout(dlg)
         lay.addWidget(QLabel(f"Asociar:\n{p}"))
         cb = QComboBox()
-        for eid, t in rows:
+        for eid, t in filas:
             cb.addItem(f"#{eid} {t}", eid)
         lay.addWidget(cb)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setObjectName("Primary")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
         lay.addWidget(btns)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)

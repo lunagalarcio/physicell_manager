@@ -7,7 +7,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from .base import PaginaBase
+from .base import (
+    PaginaBase, Seccion, Tarjeta, ESPACIO_M,
+)
 from ..visor_widget import VisorPhysiCell
 from .. import simulador as SIM
 
@@ -15,12 +17,17 @@ from .. import simulador as SIM
 class PaginaVisualizacion(PaginaBase):
     def build(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 20)
-        lay.setSpacing(8)
-        h = QLabel("Visualización")
-        h.setObjectName("H1")
-        lay.addWidget(h)
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
 
+        lay.addWidget(
+            Seccion(
+                "Visualización",
+                "Navega por los snapshots y resultados de las réplicas de un experimento.",
+            )
+        )
+
+        # Barra de selección
         top = QHBoxLayout()
         self.exp_combo = QComboBox()
         self.rep_combo = QComboBox()
@@ -40,8 +47,11 @@ class PaginaVisualizacion(PaginaBase):
         bar.setLayout(top)
         lay.addWidget(bar)
 
+        # Visor
         self.visor = VisorPhysiCell(output_dir="")
-        lay.addWidget(self.visor, 1)
+        tarjeta = Tarjeta()
+        tarjeta.add(self.visor)
+        lay.addWidget(tarjeta, 1)
 
         self.mode_combo.currentTextChanged.connect(self._modo)
         self.exp_combo.currentIndexChanged.connect(lambda _: self._cargar_reps())
@@ -56,12 +66,12 @@ class PaginaVisualizacion(PaginaBase):
         cur = conn.cursor()
         try:
             cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            rows = cur.fetchall()
+            filas = cur.fetchall()
         except Exception:
-            rows = []
+            filas = []
         conn.close()
         self.exp_combo.clear()
-        for eid, title in rows:
+        for eid, title in filas:
             self.exp_combo.addItem(f"#{eid} {title}", eid)
         self._cargar_reps()
 

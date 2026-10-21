@@ -13,7 +13,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
-from .base import PaginaBase, xml_estado, exe_estado, exp_estado, ESTILO_ESTADO
+from .base import (
+    PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, exe_estado,
+    exp_estado, ESTILO_ESTADO, ESTADO_BOTON, CampoFormulario, DialogoBase,
+    TablaBase, ESPACIO_M, ESPACIO_L, TAM_H2,
+)
 from .. import simulador as SIM
 from ..xml_validator import validar_config
 from ..motor_physicell import MotorPhysiCell
@@ -26,13 +30,15 @@ class PaginaDetalle(PaginaBase):
         super().__init__(lab_window)
         self.current_experiment_id = None
         self.worker = None
+        self.tabs_widget = None
 
     def build(self, eid):
         self.current_experiment_id = eid
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 16, 22, 16)
-        lay.setSpacing(8)
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
 
+        # ---------- Encabezado del experimento ----------
         conn = self.conn()
         cur = conn.cursor()
         cur.execute(
@@ -71,8 +77,9 @@ class PaginaDetalle(PaginaBase):
         head.addWidget(bback)
         lay.addLayout(head)
 
+        # ---------- Pestañas ----------
         tabs = QTabWidget()
-        self.tabs_widget = tabs  # referencia para botones de acceso rápido
+        self.tabs_widget = tabs
         lay.addWidget(tabs, 1)
         tabs.addTab(self._tab_resumen(eid, title, desc, tags, cfg, creado, modif, runs, n_esc, estado, col), "Resumen")
         tabs.addTab(self._tab_config(eid, cfg), "Configuración")
@@ -84,18 +91,18 @@ class PaginaDetalle(PaginaBase):
         self._res_cargar_reps()
         return self
 
-    # ---------- utilidades ----------
+    # ---------- Utilidades ----------
     def _file_row(self, label, edit, browse_fn):
-        w = QFrame()
+        w = QWidget()
         h = QHBoxLayout(w)
         h.setContentsMargins(0, 0, 0, 0)
         l = QLabel(label)
-        l.setFixedWidth(170)
+        l.setFixedWidth(150)
         h.addWidget(l)
         h.addWidget(edit, 1)
-        b = QPushButton("...")
+        b = QPushButton("…")
         b.setObjectName("Secondary")
-        b.setFixedWidth(44)
+        b.setFixedWidth(40)
         b.clicked.connect(browse_fn)
         h.addWidget(b)
         return w
@@ -109,12 +116,15 @@ class PaginaDetalle(PaginaBase):
     def _exp_dir(self):
         return os.path.join(os.path.dirname(self.db_path()), f"exp_{self.current_experiment_id}")
 
-    # ---------- Resumen ----------
+    # =====================================================================
+    # Pestaña: Resumen
+    # =====================================================================
     def _tab_resumen(self, eid, title, desc, tags, cfg, creado, modif, runs, n_esc, estado, col):
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
-        v.setSpacing(8)
+        v.setSpacing(ESPACIO_M)
+
         info = QLabel(
             f"<h2>{title or f'Experimento {eid}'}</h2>"
             f"<p>{desc or 'Sin descripción'}</p>"
@@ -126,31 +136,37 @@ class PaginaDetalle(PaginaBase):
         )
         info.setWordWrap(True)
         v.addWidget(info)
+
         grid = QGridLayout()
         accesos = [("Configuración", 0), ("Ejecuciones", 2), ("Visualización 2D/3D", 3), ("Resultados", 4)]
-        for lbl, idx in accesos:
+        for i, (lbl, idx) in enumerate(accesos):
             b = QPushButton(lbl)
             b.setObjectName("Secondary")
             b.clicked.connect(lambda _=False, i=idx: self.tabs_widget.setCurrentIndex(i))
-            grid.addWidget(b, 0, accesos.index((lbl, idx)))
+            grid.addWidget(b, 0, i)
         cw = QFrame()
         cw.setLayout(grid)
         v.addWidget(cw)
         v.addStretch()
         return w
 
-    # ---------- Configuración ----------
+    # =====================================================================
+    # Pestaña: Configuración
+    # =====================================================================
     def _tab_config(self, eid, cfg):
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
-        v.setSpacing(8)
+        v.setSpacing(ESPACIO_M)
+
         self.cfg_xml = QLineEdit(cfg or "")
         self.cfg_xml.setPlaceholderText(".../PhysiCell_settings.xml — plantilla de réplicas")
         v.addWidget(self._file_row("XML del experimento:", self.cfg_xml, self._browse_cfg_detalle))
+
         self.cfg_exe = QLineEdit(getattr(self.lw, "_last_exe", ""))
         self.cfg_exe.setPlaceholderText(".../project.exe — motor PhysiCell compilado")
         v.addWidget(self._file_row("Motor PhysiCell:", self.cfg_exe, self._browse_exe_detalle))
+
         row = QHBoxLayout()
         row.addWidget(QLabel("Réplicas por ejecución:"))
         self.cfg_reps = QSpinBox()
@@ -161,13 +177,16 @@ class PaginaDetalle(PaginaBase):
         c = QFrame()
         c.setLayout(row)
         v.addWidget(c)
+
         self.cfg_out = QLabel(f"Salida: {os.path.join(os.path.dirname(self.db_path()), f'exp_{eid}')}")
         self.cfg_out.setObjectName("Muted")
         self.cfg_out.setWordWrap(True)
         v.addWidget(self.cfg_out)
+
         self.cfg_estado = QLabel("")
         self.cfg_estado.setWordWrap(True)
         v.addWidget(self.cfg_estado)
+
         btns = QHBoxLayout()
         b1 = QPushButton("Validar archivos")
         b1.setObjectName("Secondary")
@@ -185,6 +204,7 @@ class PaginaDetalle(PaginaBase):
         c2 = QFrame()
         c2.setLayout(btns)
         v.addWidget(c2)
+
         v.addWidget(QLabel("<b>Variantes (escenarios)</b>: crea una variante del XML actual sin tocar el original."))
         vrow = QHBoxLayout()
         self.var_nombre = QLineEdit()
@@ -275,6 +295,8 @@ class PaginaDetalle(PaginaBase):
         ed.setPlainText(txt)
         lay.addWidget(ed)
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Save).setObjectName("Primary")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
         lay.addWidget(btns)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
@@ -285,7 +307,9 @@ class PaginaDetalle(PaginaBase):
             else:
                 QMessageBox.warning(self.lw, "Editar", r.get("error", "Error"))
 
-    # ---------- Ejecuciones ----------
+    # =====================================================================
+    # Pestaña: Ejecuciones
+    # =====================================================================
     def _tab_ejecucion(self, eid, cfg):
         from ..simulador import listar_escenarios, eliminar_escenario
         w = QFrame()
@@ -318,10 +342,12 @@ class PaginaDetalle(PaginaBase):
             bb.clicked.connect(_borrar)
             h.addWidget(bb)
             v.addWidget(f)
+
         info = QLabel("Lanza réplicas en segundo plano. El progreso usa el tiempo simulado real de PhysiCell.")
         info.setObjectName("Muted")
         info.setWordWrap(True)
         v.addWidget(info)
+
         row = QHBoxLayout()
         row.addWidget(QLabel("Réplicas:"))
         self.run_reps = QSpinBox()
@@ -341,12 +367,13 @@ class PaginaDetalle(PaginaBase):
         c = QFrame()
         c.setLayout(row)
         v.addWidget(c)
+
         self.run_prog = QProgressBar()
         self.run_prog.setRange(0, 100)
         v.addWidget(self.run_prog)
         self.run_log = QTextEdit()
         self.run_log.setReadOnly(True)
-        self.run_log.setMaximumHeight(180)
+        self.run_log.setMaximumHeight(160)
         v.addWidget(self.run_log)
         v.addStretch()
         return w
@@ -390,12 +417,15 @@ class PaginaDetalle(PaginaBase):
             self.worker.stop()
             self.run_log.append("Solicitando detención del proceso PhysiCell...")
 
-    # ---------- Visualización ----------
+    # =====================================================================
+    # Pestaña: Visualización
+    # =====================================================================
     def _tab_vis(self, eid):
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
-        v.setSpacing(6)
+        v.setSpacing(ESPACIO_M)
+
         top = QHBoxLayout()
         self.vis_rep = QComboBox()
         self.vis_rep.setToolTip("Réplica / salida a visualizar")
@@ -422,6 +452,7 @@ class PaginaDetalle(PaginaBase):
         bar = QFrame()
         bar.setLayout(top)
         v.addWidget(bar)
+
         self.visor = VisorPhysiCell(output_dir="")
         v.addWidget(self.visor, 1)
         self.vis_mode.currentTextChanged.connect(self._vis_modo)
@@ -489,9 +520,10 @@ class PaginaDetalle(PaginaBase):
         except Exception:
             pass
 
-    # ---------- Resultados ----------
+    # =====================================================================
+    # Pestaña: Resultados
+    # =====================================================================
     def _tab_resultados(self, eid):
-        from ..visualizador import resumen_resultados
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
@@ -500,6 +532,7 @@ class PaginaDetalle(PaginaBase):
         info.setObjectName("Muted")
         info.setWordWrap(True)
         v.addWidget(info)
+
         t = QTableWidget()
         t.setColumnCount(5)
         t.setHorizontalHeaderLabels(["Run", "Estado", "Inicio", "Fin", "Salida"])
@@ -508,7 +541,7 @@ class PaginaDetalle(PaginaBase):
         for i, (_id, rnum, st, s0, s1, od) in enumerate(runs):
             for j, val in enumerate([str(rnum), st, s0 or "", s1 or "", od or ""]):
                 t.setItem(i, j, QTableWidgetItem(val))
-        t.setMaximumHeight(180)
+        t.setMaximumHeight(160)
         v.addWidget(t)
 
         erow = QHBoxLayout()
@@ -533,7 +566,7 @@ class PaginaDetalle(PaginaBase):
         self.res_files.setColumnCount(2)
         self.res_files.setHorizontalHeaderLabels(["Archivo", "Tamaño"])
         self.res_files.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.res_files.setMaximumHeight(150)
+        self.res_files.setMaximumHeight(130)
         v.addWidget(self.res_files)
 
         self.res_temp_img = QLabel("Sin gráfica temporal.")
@@ -543,7 +576,7 @@ class PaginaDetalle(PaginaBase):
 
         self.res_log = QTextEdit()
         self.res_log.setReadOnly(True)
-        self.res_log.setMaximumHeight(110)
+        self.res_log.setMaximumHeight(100)
         v.addWidget(self.res_log)
 
         row = QHBoxLayout()
@@ -614,7 +647,7 @@ class PaginaDetalle(PaginaBase):
         if not d or not os.path.isdir(d):
             QMessageBox.warning(self.lw, "Resultados", "La réplica no tiene carpeta de salida.")
             return
-        self.lw.det_tabs.setCurrentIndex(3)
+        self.tabs_widget.setCurrentIndex(3)
         try:
             self.visor.set_output_dir(d if os.path.isfile(os.path.join(d, "initial.xml")) else os.path.join(d, "output"))
         except Exception as e:
@@ -704,7 +737,9 @@ class PaginaDetalle(PaginaBase):
         else:
             QMessageBox.warning(self.lw, "Consolidar", r.get("error", "Error"))
 
-    # ---------- Comparación ----------
+    # =====================================================================
+    # Pestaña: Comparación
+    # =====================================================================
     def _tab_comparacion(self, eid):
         from ..visor_widget import VisorPhysiCell
         w = QFrame()
@@ -717,6 +752,7 @@ class PaginaDetalle(PaginaBase):
         info.setObjectName("Muted")
         info.setWordWrap(True)
         v.addWidget(info)
+
         outs = self._salidas_replicas(eid)
         row = QHBoxLayout()
         self.cmp_a = QComboBox()
@@ -737,36 +773,43 @@ class PaginaDetalle(PaginaBase):
         bar = QFrame()
         bar.setLayout(row)
         v.addWidget(bar)
+
         self.cmp_warn = QLabel("")
         self.cmp_warn.setObjectName("Muted")
         self.cmp_warn.setWordWrap(True)
         v.addWidget(self.cmp_warn)
+
         par = QHBoxLayout()
         self.cmp_va = VisorPhysiCell()
         self.cmp_vb = VisorPhysiCell()
-        self.cmp_va.setMinimumHeight(320)
-        self.cmp_vb.setMinimumHeight(320)
+        self.cmp_va.setMinimumHeight(300)
+        self.cmp_vb.setMinimumHeight(300)
         par.addWidget(self.cmp_va, 1)
         par.addWidget(self.cmp_vb, 1)
         cp = QFrame()
         cp.setLayout(par)
         v.addWidget(cp, 1)
+
         self.cmp_a.currentIndexChanged.connect(lambda _: self._cmp_cargar())
         self.cmp_b.currentIndexChanged.connect(lambda _: self._cmp_cargar())
         self.cmp_va.slider.valueChanged.connect(lambda _: self._cmp_sync_de_a())
         self.cmp_vb.slider.valueChanged.connect(lambda _: self._cmp_sync_de_b())
+
         self.cmp_log = QTextEdit()
         self.cmp_log.setReadOnly(True)
-        self.cmp_log.setMaximumHeight(110)
+        self.cmp_log.setMaximumHeight(100)
         v.addWidget(self.cmp_log)
+
         self.cmp_img = QLabel("Sin gráfica generada.")
         self.cmp_img.setObjectName("Muted")
         self.cmp_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(self.cmp_img)
+
         b = QPushButton("Generar métricas y gráfica")
         b.setObjectName("Primary")
         b.clicked.connect(self._gen_cmp)
         v.addWidget(b)
+
         self._cmp_outs = outs
         self._cmp_cargar()
         return w
@@ -821,9 +864,10 @@ class PaginaDetalle(PaginaBase):
                 640, Qt.TransformationMode.SmoothTransformation
             ))
 
-    # ---------- Reportes ----------
+    # =====================================================================
+    # Pestaña: Reportes
+    # =====================================================================
     def _tab_reportes(self, eid):
-        from ..reportes import generar_reporte_html, exportar_reporte_pdf, exportar_runs_csv, exportar_runs_json
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
@@ -831,6 +875,7 @@ class PaginaDetalle(PaginaBase):
         info.setObjectName("Muted")
         info.setWordWrap(True)
         v.addWidget(info)
+
         conn = self.conn()
         cur = conn.cursor()
         cur.execute("SELECT title, config_xml_path, created_at FROM experiments WHERE id=?", (eid,))
@@ -851,7 +896,7 @@ class PaginaDetalle(PaginaBase):
 
         self.rep_log = QTextEdit()
         self.rep_log.setReadOnly(True)
-        self.rep_log.setMaximumHeight(110)
+        self.rep_log.setMaximumHeight(100)
         v.addWidget(self.rep_log)
 
         row = QHBoxLayout()

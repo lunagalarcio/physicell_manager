@@ -5,39 +5,42 @@ from PyQt6.QtWidgets import (
     QFormLayout, QDialogButtonBox, QMessageBox, QMenu
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
 
-from .base import PaginaBase, xml_estado
+from .base import (
+    PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, ESPACIO_M,
+)
 from .. import simulador as SIM
+from ..theme_lab import LIMA
 
 
 class PaginaExperimentos(PaginaBase):
     def build(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 20)
-        lay.setSpacing(10)
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
 
-        top = QHBoxLayout()
-        h = QLabel("Experimentos")
-        h.setObjectName("H1")
-        top.addWidget(h)
-        top.addStretch()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Buscar por título, descripción o etiquetas...")
-        self.search.setFixedWidth(300)
+        self.search.setFixedWidth(320)
         self.search.textChanged.connect(lambda _: self.refrescar())
-        top.addWidget(self.search)
+
         b = QPushButton("+ Nuevo experimento")
         b.setObjectName("Primary")
         b.clicked.connect(self._nuevo)
-        top.addWidget(b)
-        lay.addLayout(top)
+
+        lay.addWidget(
+            Seccion(
+                "Experimentos",
+                "Lista de experimentos creados. Abre uno para asignar XML, ejecutar réplicas y ver resultados.",
+                acciones=[self.search, b],
+            )
+        )
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.wrap = QWidget()
         self.grid = QGridLayout(self.wrap)
-        self.grid.setSpacing(12)
+        self.grid.setSpacing(ESPACIO_M)
         scroll.setWidget(self.wrap)
         lay.addWidget(scroll, 1)
 
@@ -45,8 +48,9 @@ class PaginaExperimentos(PaginaBase):
         return self
 
     def refrescar(self):
-        for i in reversed(range(self.grid.count())):
-            w = self.grid.itemAt(i).widget()
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            w = item.widget()
             if w:
                 w.deleteLater()
 
@@ -54,10 +58,12 @@ class PaginaExperimentos(PaginaBase):
         conn = self.conn()
         cur = conn.cursor()
         try:
-            cur.execute("SELECT id, title, description, tags, config_xml_path FROM experiments ORDER BY id DESC")
-            rows = cur.fetchall()
+            cur.execute(
+                "SELECT id, title, description, tags, config_xml_path FROM experiments ORDER BY id DESC"
+            )
+            filas = cur.fetchall()
         except Exception:
-            rows = []
+            filas = []
         counts = {}
         try:
             cur.execute("SELECT experiment_id, COUNT(*) FROM runs GROUP BY experiment_id")
@@ -66,55 +72,27 @@ class PaginaExperimentos(PaginaBase):
             pass
         conn.close()
 
-        col = row = 0
-        for eid, title, desc, tags, cfg in rows:
+        col = fila = 0
+        for eid, title, desc, tags, cfg in filas:
             if q and q not in f"{title} {desc} {tags}".lower():
                 continue
             xe, _ = xml_estado(cfg)
-            card = self._exp_card(eid, title, desc, tags, None, xe, counts.get(eid, 0))
-            self.grid.addWidget(card, row, col)
+            card = self._tarjeta_experimento(
+                eid, title, desc, tags, None, xe, counts.get(eid, 0)
+            )
+            self.grid.addWidget(card, fila, col)
             col += 1
             if col > 2:
                 col = 0
-                row += 1
+                fila += 1
 
-    def _exp_card(self, eid, title, desc, tags, modif, xe, runs):
-        f = QFrame()
-        f.setObjectName("Card")
-        f.setMinimumWidth(280)
-        f.setMaximumWidth(360)
-        v = QVBoxLayout(f)
-        v.setSpacing(4)
-        t = QLabel(title or f"Experimento {eid}")
-        t.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        t.setWordWrap(True)
-        v.addWidget(t)
-        d = QLabel((desc or "Sin descripción")[:140])
-        d.setObjectName("Muted")
-        d.setWordWrap(True)
-        v.addWidget(d)
-        m = QLabel(
-            f"{tags or 'sin etiquetas'}  •  {runs} runs  •  XML: {xe}"
+    def _tarjeta_experimento(self, eid, title, desc, tags, modif, xe, runs):
+        from .resumen import ExperimentoCard
+        return ExperimentoCard(
+            eid, title, desc, tags, modif, xe, runs,
+            on_abrir=self.lw.abrir_detalle,
+            on_acciones=self._acciones_exp,
         )
-        m.setObjectName("Muted")
-        m.setWordWrap(True)
-        v.addWidget(m)
-        row = QHBoxLayout()
-        b1 = QPushButton("Abrir")
-        b1.setObjectName("Primary")
-        b1.clicked.connect(lambda _=False, e=eid: self.lw.abrir_detalle(e))
-        b2 = QPushButton("⋯")
-        b2.setObjectName("Secondary")
-        b2.setFixedWidth(40)
-        b2.setToolTip("Editar / Eliminar")
-        b2.clicked.connect(lambda _=False, e=eid: self._acciones_exp(e))
-        row.addWidget(b1)
-        row.addWidget(b2)
-        row.addStretch()
-        w = QWidget()
-        w.setLayout(row)
-        v.addWidget(w)
-        return f
 
     def _acciones_exp(self, eid):
         m = QMenu(self.lw)
@@ -129,8 +107,10 @@ class PaginaExperimentos(PaginaBase):
         cur.execute("SELECT title, description, tags FROM experiments WHERE id=?", (eid,))
         t, d, g = cur.fetchone() or ("", "", "")
         conn.close()
+
         dlg = QDialog(self.lw)
         dlg.setWindowTitle("Editar experimento")
+        dlg.setMinimumWidth(420)
         lay = QVBoxLayout(dlg)
         form = QFormLayout()
         e1, e2, e3 = QLineEdit(t), QLineEdit(d or ""), QLineEdit(g or "")
@@ -138,7 +118,14 @@ class PaginaExperimentos(PaginaBase):
         form.addRow("Descripción:", e2)
         form.addRow("Etiquetas:", e3)
         lay.addLayout(form)
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText("Guardar")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
+        btns.button(QDialogButtonBox.StandardButton.Ok).setObjectName("Primary")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
         lay.addWidget(btns)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
@@ -171,6 +158,7 @@ class PaginaExperimentos(PaginaBase):
         from PyQt6.QtWidgets import QLineEdit
         dlg = QDialog(self.lw)
         dlg.setWindowTitle("Nuevo experimento")
+        dlg.setMinimumWidth(450)
         lay = QVBoxLayout(dlg)
         form = QFormLayout()
         t1, t2, t3 = QLineEdit(), QLineEdit(), QLineEdit()
@@ -181,16 +169,25 @@ class PaginaExperimentos(PaginaBase):
         form.addRow("Descripción:", t2)
         form.addRow("Etiquetas:", t3)
         lay.addLayout(form)
+
         hint = QLabel("Podrás asignar el XML en la pestaña Configuración del detalle.")
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         lay.addWidget(hint)
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText("Crear")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
+        btns.button(QDialogButtonBox.StandardButton.Ok).setObjectName("Primary")
+        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
         lay.addWidget(btns)
         btns.accepted.connect(dlg.accept)
         btns.rejected.connect(dlg.reject)
         if not dlg.exec():
             return
+
         conn = self.conn()
         cur = conn.cursor()
         cur.execute("SELECT MAX(id) FROM experiments")

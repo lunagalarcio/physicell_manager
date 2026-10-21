@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QButtonGroup, QStackedWidget
 )
+from PyQt6.QtGui import QFont
+
 from .theme_lab import LAB_QSS
 from .nucleo import init_database
 from .paginas.base import PaginaBase
@@ -29,7 +31,7 @@ class LabWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PhysiCell Lab")
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(1200, 800)
         self.setStyleSheet(LAB_QSS)
         self.current_experiment_id = None
         self.worker = None
@@ -54,7 +56,7 @@ class LabWindow(QMainWindow):
         sub = QLabel("Simulación celular")
         sub.setObjectName("BrandSub")
         sl.addWidget(sub)
-        sl.addSpacing(10)
+        sl.addSpacing(12)
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_btns = {}

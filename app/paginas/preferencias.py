@@ -8,28 +8,38 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from .base import PaginaBase, get_db_path
+from .base import (
+    PaginaBase, Seccion, Tarjeta, get_db_path, ESPACIO_M,
+)
 from ..motor_physicell import MotorPhysiCell
+from ..theme_lab import LIMA
 
 
 class PaginaPreferencias(PaginaBase):
     def build(self):
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 20)
-        lay.setSpacing(8)
-        h = QLabel("Preferencias")
-        h.setObjectName("H1")
-        lay.addWidget(h)
+        lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        lay.setSpacing(ESPACIO_M)
+
+        lay.addWidget(Seccion("Preferencias", "Rutas del motor PhysiCell y utilidades de calidad."))
 
         self.root_edit = QLineEdit("")
         self.root_edit.setPlaceholderText("Carpeta raíz de PhysiCell (motor externo)")
-        lay.addWidget(QLabel("Raíz de PhysiCell (motor, no se modifica):"))
-        lay.addWidget(self.root_edit)
+        tarjeta = Tarjeta()
+        tarjeta.add(QLabel("Raíz de PhysiCell (motor, no se modifica):"))
+        tarjeta.add(self.root_edit)
 
         self.bin_edit = QLineEdit(getattr(self.lw, "_last_exe", "") or "")
         self.bin_edit.setPlaceholderText(".../project.exe por defecto para nuevas ejecuciones")
-        lay.addWidget(QLabel("Binario por defecto:"))
-        lay.addWidget(self.bin_edit)
+        tarjeta.add(QLabel("Binario por defecto:"))
+        tarjeta.add(self.bin_edit)
+
+        b_det = QPushButton("Detectar binario en la raíz")
+        b_det.setObjectName("Secondary")
+        b_det.clicked.connect(self._detectar_bin)
+        tarjeta.add(b_det)
+
+        lay.addWidget(tarjeta)
 
         info = QLabel(
             f"Datos por usuario: {get_db_path()}\n"
@@ -40,20 +50,15 @@ class PaginaPreferencias(PaginaBase):
         info.setWordWrap(True)
         lay.addWidget(info)
 
-        b_det = QPushButton("Detectar binario en la raíz")
-        b_det.setObjectName("Secondary")
-        b_det.clicked.connect(self._detectar_bin)
-        lay.addWidget(b_det)
-
         lay.addWidget(QLabel("Calidad:"))
         self.test_log = QTextEdit()
         self.test_log.setReadOnly(True)
-        self.test_log.setMaximumHeight(160)
+        self.test_log.setMaximumHeight(140)
         lay.addWidget(self.test_log)
 
         b_tests = QPushButton("Ejecutar pruebas de regresión")
         b_tests.setObjectName("Secondary")
-        b_tests.setToolTip("Corre tests/test_regresion.py con datos reales y muestra el resultado")
+        b_tests.setToolTip("Corre tests/test_regresion.py y muestra el resultado")
         b_tests.clicked.connect(self._ejecutar_tests)
         lay.addWidget(b_tests)
 
