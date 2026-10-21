@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QGridLayout, QDialog, QFormLayout, QDialogButtonBox, QSizePolicy, QFrame, QWidget
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 from .base import (
     PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, exe_estado,
@@ -19,7 +19,7 @@ from .base import (
     TablaBase, ESPACIO_M, ESPACIO_L, TAM_H2,
 )
 from .. import simulador as SIM
-from ..xml_validator import validar_config
+from ..xml_validator import validar_config, validar_texto
 from ..motor_physicell import MotorPhysiCell
 from ..visor_widget import VisorPhysiCell
 from ..visor3d_vtk import abrir_vtk
@@ -289,11 +289,46 @@ class PaginaDetalle(PaginaBase):
             return
         dlg = QDialog(self.lw)
         dlg.setWindowTitle("Editar XML")
-        dlg.resize(720, 520)
+        dlg.resize(900, 600)
         lay = QVBoxLayout(dlg)
+
         ed = QPlainTextEdit()
         ed.setPlainText(txt)
+        ed.setFont(QFont("Consolas", 10))
         lay.addWidget(ed)
+
+        lbl_val = QLabel("")
+        lbl_val.setObjectName("Muted")
+        lbl_val.setWordWrap(True)
+        lbl_val.setMaximumHeight(40)
+        lay.addWidget(lbl_val)
+
+        timer = QTimer(dlg)
+        timer.setSingleShot(True)
+
+        def _validar_tiempo_real():
+            texto = ed.toPlainText()
+            v = validar_texto(texto)
+            if v.get("ok"):
+                avisos = v.get("warnings", [])
+                if avisos:
+                    lbl_val.setText("Válido · " + "; ".join(avisos[:3]))
+                    lbl_val.setStyleSheet("color: #F5B83D;")
+                else:
+                    lbl_val.setText("Válido")
+                    lbl_val.setStyleSheet("color: #4CAF69;")
+            else:
+                lbl_val.setText("Error: " + "; ".join(v.get("errores", [])[:3]))
+                lbl_val.setStyleSheet("color: #E5484D;")
+
+        def _programar_validacion():
+            timer.stop()
+            timer.start(400)
+
+        ed.textChanged.connect(_programar_validacion)
+        timer.timeout.connect(_validar_tiempo_real)
+        _validar_tiempo_real()
+
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         btns.button(QDialogButtonBox.StandardButton.Save).setObjectName("Primary")
         btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")

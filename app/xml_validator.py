@@ -103,3 +103,41 @@ def validar_config(xml_path):
     if not result["errores"]:
         result["ok"] = True
     return result
+
+
+def validar_texto(texto: str) -> dict:
+    """Valida que un texto sea XML bien formado y tenga estructura básica de PhysiCell.
+
+    Útil para validación en tiempo real mientras el usuario escribe en un editor.
+    No requiere archivo físico; analiza el contenido en memoria.
+    """
+    result = {"ok": False, "errores": [], "warnings": [], "path": None}
+    if not texto or not texto.strip():
+        result["errores"].append("Texto vacío.")
+        return result
+    try:
+        root = ET.fromstring(texto)
+    except ET.ParseError as e:
+        result["errores"].append(f"XML mal formado: {e}")
+        return result
+    except Exception as e:
+        result["errores"].append(f"Error al parsear: {e}")
+        return result
+
+    def find_any(tag):
+        for el in root.iter():
+            if el.tag.split("}")[-1] == tag:
+                return True
+        return False
+
+    for sec in REQUIRED_SECTIONS:
+        if not find_any(sec):
+            result["errores"].append(f"Falta sección: {sec}")
+
+    for tag in REQUIRED_TAGS:
+        if not find_any(tag):
+            result["warnings"].append(f"Falta tag recomendado: {tag}")
+
+    if not result["errores"]:
+        result["ok"] = True
+    return result
