@@ -138,29 +138,54 @@ physicell_experimentos/
 │  ├─ agregador.py         # Consolidar frames/células a CSV
 │  ├─ visor_widget.py      # Visor 2D/3D integrado
 │  ├─ visor3d_vtk.py       # Tumor 3D PyVista/VTK
-│  ├─ interfaz_notion.py   # Ventana legacy (re‑exporta núcleo)
 │  ├─ lab_window.py        # Navegación y pantallas principales
 │  ├─ theme_lab.py         # Temas visuales
-│  └─ …
+│  ├─ paginas/             # Páginas de UI (una por sección)
+│  └─ legacy/              # Código legacy (archivado)
+│     └─ interfaz_notion.py # Ventana legacy (re‑exporta núcleo)
 ├─ config/                 # Plantillas XML de ejemplo
 ├─ studio/                 # Módulos del “Studio” PhysiCell (referencia)
 ├─ tests/
-│  └─ test_regresion.py    # Suite de pruebas con datos reales
-├─ .github/                # (Opcional) CI / flujos de trabajo
-└─ dist/                   # (Generado) Ejecutable PhysiCellManager.exe
+│  ├─ conftest.py          # Fixtures compartidas (portables)
+│  ├─ test_xml_validator.py
+│  ├─ test_simulador.py
+│  ├─ test_agregador.py
+│  ├─ test_comparacion.py
+│  ├─ test_reportes.py
+│  ├─ test_visores.py
+│  └─ test_regresion.py    # Suite de pruebas (ejecutable directamente)
+├─ pytest.ini              # Configuración de pytest
+├─ .github/
+│  └─ workflows/
+│     └─ ci.yml            # CI: Ubuntu + Windows, Python 3.12/3.13
+└─ dist/                   # (Generado) Ejecutable PhysiCellManager
 ```
 
 ---
 
 ## 📦 Empaquetado y distribución
 
-El proyecto incluye `build.spec` para generar un ejecutable autónomo con **PyInstaller**:
+El proyecto incluye `build.spec` para generar un ejecutable autónomo con **PyInstaller**.
+PhysiCell queda como motor externo (no se empaqueta ni modifica).
+
+### Windows
 
 ```powershell
 pyinstaller build.spec
 ```
 
-El resultado aparecerá en `dist/PhysiCellManager/PhysiCellManager.exe`.  
+El resultado aparecerá en `dist/PhysiCellManager/PhysiCellManager.exe`.
+
+### Linux / macOS
+
+```bash
+pyinstaller build.spec
+```
+
+El resultado aparecerá en `dist/PhysiCellManager/PhysiCellManager` (sin extensión `.exe`).
+
+> **Nota:** En Linux y macOS el ejecutable no lleva extensión. El motor PhysiCell (`project` o `project.exe`) debe estar compilado por separado y su ruta configurarse en Preferencias → Raíz de PhysiCell.
+
 **No se sube el `dist/` ni el `build/` al repositorio** (están en `.gitignore`).
 
 ---
