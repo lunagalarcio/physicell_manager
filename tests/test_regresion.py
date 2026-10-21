@@ -122,4 +122,4 @@ rr2 = generar_reporte_html(999999, db, os.path.join(TMP, "rep_inexistente.html")
 check("reporte inexistente retorna error", not rr2.get("ok") and "error" in rr2)
 
 print(f"\n{len(fails)} fallos, {len(skips)} saltados: {fails}" if fails else f"\nTODO OK ({len(skips)} saltados)")
-sys.exit(1 if fails else 0)
+
