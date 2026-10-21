@@ -44,12 +44,12 @@ class PaginaDetalle(PaginaBase):
         conn = self.conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT title, description, tags, config_xml_path, binary_path, custom_cpp_path, created_at, last_modified "
+            "SELECT title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path, created_at, last_modified "
             "FROM experiments WHERE id=?", (eid,)
         )
-        r = cur.fetchone() or ("", "", "", "", "", "", None, None)
+        r = cur.fetchone() or ("", "", "", "", "", "", "", None, None)
         conn.close()
-        title, desc, tags, cfg, binp, cpp, creado, modif = r
+        title, desc, tags, cfg, binp, cpp, h, creado, modif = r
         runs = self._runs_exp(eid)
         conn2 = self.conn()
         n_esc = len(SIM.listar_escenarios(conn2, eid))
@@ -84,7 +84,7 @@ class PaginaDetalle(PaginaBase):
         self.tabs_widget = tabs
         lay.addWidget(tabs, 1)
         tabs.addTab(self._tab_resumen(eid, title, desc, tags, cfg, creado, modif, runs, n_esc, estado, col), "Resumen")
-        tabs.addTab(self._tab_config(eid, cfg, binp, cpp), "Configuración")
+        tabs.addTab(self._tab_config(eid, cfg, binp, cpp, h), "Configuración")
         tabs.addTab(self._tab_ejecucion(eid, cfg), "Ejecuciones")
         tabs.addTab(self._tab_vis(eid), "Visualización 2D/3D")
         tabs.addTab(self._tab_resultados(eid), "Resultados")
@@ -155,7 +155,7 @@ class PaginaDetalle(PaginaBase):
     # =====================================================================
     # Pestaña: Configuración
     # =====================================================================
-    def _tab_config(self, eid, cfg, binp="", cpp=""):
+    def _tab_config(self, eid, cfg, binp="", cpp="", h=""):
         w = QFrame()
         w.setObjectName("Card")
         v = QVBoxLayout(w)
@@ -172,6 +172,10 @@ class PaginaDetalle(PaginaBase):
         self.cfg_cpp = QLineEdit(cpp or "")
         self.cfg_cpp.setPlaceholderText(".../custom.cpp — reglas propias del motor (opcional)")
         v.addWidget(self._file_row("custom.cpp del motor:", self.cfg_cpp, self._browse_cpp_detalle))
+
+        self.cfg_h = QLineEdit(h or "")
+        self.cfg_h.setPlaceholderText(".../custom.h — encabezado del motor (opcional)")
+        v.addWidget(self._file_row("custom.h del motor:", self.cfg_h, self._browse_h_detalle))
 
         row = QHBoxLayout()
         row.addWidget(QLabel("Réplicas por ejecución:"))
@@ -257,6 +261,12 @@ class PaginaDetalle(PaginaBase):
             self.cfg_cpp.setText(f)
             self._validar_detalle(silencioso=True)
 
+    def _browse_h_detalle(self):
+        f, _ = QFileDialog.getOpenFileName(self.lw, "custom.h del motor", "", "C/C++ (*.h *.hpp);;Todos (*)")
+        if f:
+            self.cfg_h.setText(f)
+            self._validar_detalle(silencioso=True)
+
     def _validar_detalle(self, silencioso=False):
         xe, _ = xml_estado(self.cfg_xml.text().strip())
         ee, _ = exe_estado(self.cfg_exe.text().strip())
@@ -277,8 +287,8 @@ class PaginaDetalle(PaginaBase):
         conn = self.conn()
         cur = conn.cursor()
         cur.execute(
-            "UPDATE experiments SET config_xml_path=?, binary_path=?, custom_cpp_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-            (p, self.cfg_exe.text().strip(), self.cfg_cpp.text().strip(), self.current_experiment_id),
+            "UPDATE experiments SET config_xml_path=?, binary_path=?, custom_cpp_path=?, custom_h_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
+            (p, self.cfg_exe.text().strip(), self.cfg_cpp.text().strip(), self.cfg_h.text().strip(), self.current_experiment_id),
         )
         conn.commit()
         conn.close()
@@ -437,13 +447,14 @@ class PaginaDetalle(PaginaBase):
         n = self.run_reps.value()
         exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
         cpp = self.cfg_cpp.text().strip() if hasattr(self, "cfg_cpp") else ""
+        hh = self.cfg_h.text().strip() if hasattr(self, "cfg_h") else ""
 
-        # Persistencia automática: guarda el motor y custom.cpp en la BD aunque no se cierre la pestaña
+        # Persistencia automática: guarda el motor y custom.cpp/h en la BD aunque no se cierre la pestaña
         conn = self.conn()
         cur = conn.cursor()
         cur.execute(
-            "UPDATE experiments SET binary_path=?, custom_cpp_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-            (exe, cpp, eid),
+            "UPDATE experiments SET binary_path=?, custom_cpp_path=?, custom_h_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
+            (exe, cpp, hh, eid),
         )
         conn.commit()
         conn.close()

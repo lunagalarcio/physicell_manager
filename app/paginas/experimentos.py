@@ -60,7 +60,7 @@ class PaginaExperimentos(PaginaBase):
         try:
             cur.execute(
                 """SELECT e.id, e.title, e.description, e.tags, e.config_xml_path,
-                          e.binary_path, e.custom_cpp_path, e.last_modified,
+                          e.binary_path, e.custom_cpp_path, e.custom_h_path, e.last_modified,
                           COUNT(r.id) as total_runs,
                           SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END),
                           SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END),
@@ -75,12 +75,12 @@ class PaginaExperimentos(PaginaBase):
             filas = cur.fetchall()
         except Exception:
             cur.execute(
-                "SELECT id, title, description, tags, config_xml_path, binary_path, custom_cpp_path, last_modified "
+                "SELECT id, title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path, last_modified "
                 "FROM experiments ORDER BY id DESC"
             )
             filas = [
-                (a, b, c, d, e, f, g, h, 0, 0, 0, 0, None)
-                for a, b, c, d, e, f, g, h in cur.fetchall()
+                (a, b, c, d, e, f, g, h, i, 0, 0, 0, 0, None)
+                for a, b, c, d, e, f, g, h, i in cur.fetchall()
             ]
         conn.close()
 
@@ -93,17 +93,18 @@ class PaginaExperimentos(PaginaBase):
             cfg = r[4] if len(r) > 4 else ""
             binp = r[5] if len(r) > 5 else ""
             cpp = r[6] if len(r) > 6 else ""
-            modif = r[7] if len(r) > 7 else None
+            h_path = r[7] if len(r) > 7 else ""
+            modif = r[8] if len(r) > 8 else None
 
             if q and q not in f"{title} {desc} {tags}".lower():
                 continue
 
             # Estadísticas de ejecuciones
-            total_runs = r[8] if len(r) > 8 else 0
-            completadas = r[9] if len(r) > 9 else 0
-            en_curso = r[10] if len(r) > 10 else 0
-            falladas = r[11] if len(r) > 11 else 0
-            ultima_fecha = r[12] if len(r) > 12 else None
+            total_runs = r[9] if len(r) > 9 else 0
+            completadas = r[10] if len(r) > 10 else 0
+            en_curso = r[11] if len(r) > 11 else 0
+            falladas = r[12] if len(r) > 12 else 0
+            ultima_fecha = r[13] if len(r) > 13 else None
 
             # Estado del XML
             xe_label, xe_clave = xml_estado(cfg)
@@ -150,8 +151,8 @@ class PaginaExperimentos(PaginaBase):
         from PyQt6.QtWidgets import QLineEdit
         conn = self.conn()
         cur = conn.cursor()
-        cur.execute("SELECT title, description, tags, binary_path, custom_cpp_path FROM experiments WHERE id=?", (eid,))
-        t, d, g, bp, cpp = cur.fetchone() or ("", "", "", "", "")
+        cur.execute("SELECT title, description, tags, binary_path, custom_cpp_path, custom_h_path FROM experiments WHERE id=?", (eid,))
+        t, d, g, bp, cpp, h = cur.fetchone() or ("", "", "", "", "", "")
         conn.close()
 
         dlg = QDialog(self.lw)
@@ -159,14 +160,16 @@ class PaginaExperimentos(PaginaBase):
         dlg.setMinimumWidth(420)
         lay = QVBoxLayout(dlg)
         form = QFormLayout()
-        e1, e2, e3, e4, e5 = QLineEdit(t), QLineEdit(d or ""), QLineEdit(g or ""), QLineEdit(bp or ""), QLineEdit(cpp or "")
+        e1, e2, e3, e4, e5, e6 = QLineEdit(t), QLineEdit(d or ""), QLineEdit(g or ""), QLineEdit(bp or ""), QLineEdit(cpp or ""), QLineEdit(h or "")
         e4.setPlaceholderText(".../project.exe — motor PhysiCell (opcional)")
         e5.setPlaceholderText(".../custom.cpp — reglas propias del motor (opcional)")
+        e6.setPlaceholderText(".../custom.h — encabezado del motor (opcional)")
         form.addRow("Título:", e1)
         form.addRow("Descripción:", e2)
         form.addRow("Etiquetas:", e3)
         form.addRow("Motor PhysiCell:", e4)
         form.addRow("custom.cpp del motor:", e5)
+        form.addRow("custom.h del motor:", e6)
         lay.addLayout(form)
 
         btns = QDialogButtonBox(
@@ -182,7 +185,7 @@ class PaginaExperimentos(PaginaBase):
         if dlg.exec():
             conn = self.conn()
             SIM.actualizar_experimento(
-                conn, eid, e1.text().strip() or t, e2.text().strip(), e3.text().strip(), e4.text().strip(), e5.text().strip()
+                conn, eid, e1.text().strip() or t, e2.text().strip(), e3.text().strip(), e4.text().strip(), e5.text().strip(), e6.text().strip()
             )
             conn.close()
             self.refrescar()
@@ -243,8 +246,8 @@ class PaginaExperimentos(PaginaBase):
         cur.execute("SELECT MAX(id) FROM experiments")
         nid = ((cur.fetchone()[0] or 0) + 1)
         cur.execute(
-            "INSERT INTO experiments (id, title, description, tags, config_xml_path, binary_path, custom_cpp_path) VALUES (?,?,?,?,?,?,?)",
-            (nid, t1.text().strip() or f"Experimento {nid}", t2.text().strip(), t3.text().strip(), "", "", ""),
+            "INSERT INTO experiments (id, title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path) VALUES (?,?,?,?,?,?,?,?)",
+            (nid, t1.text().strip() or f"Experimento {nid}", t2.text().strip(), t3.text().strip(), "", "", "", ""),
         )
         conn.commit()
         conn.close()

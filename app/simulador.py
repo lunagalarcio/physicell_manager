@@ -115,11 +115,11 @@ def listar_runs(conn, experiment_id):
     return cur.fetchall()
 
 
-def actualizar_experimento(conn, experiment_id, title, description, tags, binary_path="", custom_cpp_path=""):
+def actualizar_experimento(conn, experiment_id, title, description, tags, binary_path="", custom_cpp_path="", custom_h_path=""):
     cur = conn.cursor()
     cur.execute(
-        "UPDATE experiments SET title=?, description=?, tags=?, binary_path=?, custom_cpp_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-        (title, description, tags, binary_path, custom_cpp_path, experiment_id),
+        "UPDATE experiments SET title=?, description=?, tags=?, binary_path=?, custom_cpp_path=?, custom_h_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
+        (title, description, tags, binary_path, custom_cpp_path, custom_h_path, experiment_id),
     )
     conn.commit()
 
