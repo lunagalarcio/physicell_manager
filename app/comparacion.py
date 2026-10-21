@@ -3,6 +3,9 @@
 import os
 import glob
 import sqlite3
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def n_celulas_final(output_dir):
@@ -16,8 +19,8 @@ def n_celulas_final(output_dir):
             try:
                 import scipy.io
                 return int(scipy.io.loadmat(cand)["cells"].shape[1])
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("n_celulas_final: error leyendo %s: %s", cand, e)
     snaps = sorted(glob.glob(os.path.join(output_dir, "snapshot*.svg")))
     if not snaps:
         snaps = sorted(glob.glob(os.path.join(output_dir, "output", "snapshot*.svg")))
@@ -31,8 +34,8 @@ def n_celulas_final(output_dir):
                     for c2 in ch:
                         if c2.attrib.get("id") == "cells":
                             return len(list(c2))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("n_celulas_final: error parseando snapshot: %s", e)
     return None
 
 

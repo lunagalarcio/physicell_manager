@@ -65,7 +65,7 @@ def _mats(output_dir):
 def leer_estado_celular(output_dir, frame_idx):
     """Cruza SVG (posición, radio, tipo, color) con cells.mat (estado, núcleo...)."""
     import numpy as _np
-    from .visor_widget import parse_snapshot_svg, leer_bounds
+    from .visor_widget import parse_snapshot_svg, leer_bounds, detectar_fila_nrad
     snaps = _snapshots(output_dir)
     if not snaps:
         return {"ok": False, "error": "Sin snapshot*.svg en " + str(output_dir)}
@@ -103,7 +103,7 @@ def leer_estado_celular(output_dir, frame_idx):
             vols = (m[4].ravel().tolist() if m.shape[0] > 4 else [None] * ncols)
             pres = (m[20].ravel().tolist() if m.shape[0] > 20 else [None] * ncols)
             ctype = (m[5].ravel().tolist() if m.shape[0] > 5 else [None] * ncols)
-            nrad = (m[38].ravel().tolist() if m.shape[0] > 38 else [None] * ncols)
+            nrad = detectar_fila_nrad(m, ncols) if m.shape[0] > 0 else [None] * ncols
             try:
                 ids = [int(v) for v in m[0].ravel().tolist()] if m.shape[0] > 0 else list(range(ncols))
             except Exception:

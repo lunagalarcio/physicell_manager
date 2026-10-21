@@ -19,8 +19,6 @@ from .xml_validator import validar_config
 from .motor_physicell import MotorPhysiCell
 from .visor_widget import VisorPhysiCell
 
-PHYSI_OUT = r"C:\Users\PC\Downloads\gestor_physicell\gestor_physicell\PhysiCell\output"
-
 
 def xml_estado(path):
     if not path or not str(path).strip():
@@ -844,7 +842,7 @@ class LabWindow(QMainWindow):
         c = QWidget()
         c.setLayout(top)
         v.addWidget(c)
-        self.visor = VisorPhysiCell(output_dir=PHYSI_OUT)
+        self.visor = VisorPhysiCell(output_dir="")
         v.addWidget(self.visor, 1)
         self.vis_mode.currentTextChanged.connect(self._vis_modo)
         self._vis_cargar()
@@ -865,7 +863,7 @@ class LabWindow(QMainWindow):
         cur.execute("SELECT title FROM experiments WHERE id=?", (self.current_experiment_id,))
         r = cur.fetchone()
         conn.close()
-        abrir_vtk(self, d or PHYSI_OUT, titulo=f"Tumor 3D — {(r[0] if r else '') or self.current_experiment_id}")
+        abrir_vtk(self, d or "", titulo=f"Tumor 3D — {(r[0] if r else '') or self.current_experiment_id}")
 
     def _salidas_replicas(self, eid):
         conn = sqlite3.connect(get_db_path())
@@ -880,7 +878,7 @@ class LabWindow(QMainWindow):
                     if _g.glob(os.path.join(d, "snapshot*.svg")) or _g.glob(os.path.join(d, "*_cells.mat")):
                         outs.append((f"Réplica {rnum} ({st})", d))
                         break
-        outs.append(("Salida global PhysiCell/output", PHYSI_OUT))
+        outs.append(("Salida global PhysiCell/output", ""))
         return outs
 
     def _vis_cargar(self):
@@ -1344,7 +1342,7 @@ class LabWindow(QMainWindow):
         c = QWidget()
         c.setLayout(top)
         lay.addWidget(c)
-        self.g_visor = VisorPhysiCell(output_dir=PHYSI_OUT)
+        self.g_visor = VisorPhysiCell(output_dir="")
         lay.addWidget(self.g_visor, 1)
         self.g_mode.currentTextChanged.connect(self._g_modo)
         self.g_exp.currentIndexChanged.connect(lambda _: self._g_reps())
@@ -1387,7 +1385,7 @@ class LabWindow(QMainWindow):
                     if _g.glob(os.path.join(d, "snapshot*.svg")) or _g.glob(os.path.join(d, "*_cells.mat")):
                         outs.append((f"Réplica {rnum} ({st})", d))
                         break
-        outs.append(("Salida global PhysiCell/output", PHYSI_OUT))
+        outs.append(("Salida global PhysiCell/output", ""))
         return outs
 
     def _g_cargar(self):

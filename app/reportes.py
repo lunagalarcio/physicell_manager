@@ -3,7 +3,10 @@
 import os
 import sqlite3
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def _esc(s):
@@ -203,8 +206,8 @@ def _varianza_replicas(datos_por_replica):
             e = _estadisticas(d)
             if e.get("ok") and e.get("n_final") is not None:
                 finals.append(float(e["n_final"]))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("varianza_replicas: error calculando estadísticas: %s", e)
     if len(finals) < 2:
         return None
     arr = np.asarray(finals, dtype=float)
@@ -240,8 +243,8 @@ def _detectar_anomalias(outs):
                         anomalias.append({"replica": rnum, "frame": i,
                                           "perdidas": len(perdidas), "ids": list(perdidas)[:5]})
                 prev = ids
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("detectar_anomalias: error en réplica %s: %s", rnum, e)
     return anomalias
 
 
@@ -351,15 +354,6 @@ def extraer_parametros(xml_path):
     except Exception as e:
         info["error"] = str(e)
     return info
-    """Carpetas de salida con snapshots, una por réplica."""
-    import glob as _g
-    outs = []
-    for rnum, st, _s0, _s1, od in runs:
-        for d in ([os.path.join(od, "output"), od] if od else []):
-            if d and os.path.isdir(d) and _g.glob(os.path.join(d, "snapshot*.svg")):
-                outs.append((rnum, st, d))
-                break
-    return outs
 
 
 def _render_frame(output_dir, frame_idx, out_png):

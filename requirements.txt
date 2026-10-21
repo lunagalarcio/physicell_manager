@@ -1,2 +1,8 @@
 PyQt6>=6.6.0
 lxml>=4.9.0
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+pyvista>=0.43.0
+pyvistaqt>=0.5.0
+vtk>=9.2.0

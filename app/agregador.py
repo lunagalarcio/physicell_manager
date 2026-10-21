@@ -18,6 +18,8 @@ import glob
 import csv
 import numpy as np
 
+from .visor_widget import detectar_fila_nrad
+
 
 def _frames_de(output_dir):
     """Encuentra todos los archivos de snapshot SVG por frame."""
@@ -89,11 +91,8 @@ def _cargar_cells_mat(output_dir, tag=None):
             out["cycle"] = [float(v) if v is not None else None for v in m[6].ravel().tolist()] if m.shape[0] > 6 else [None] * ncols
         except Exception:
             out["cycle"] = [None] * ncols
-        # Radio nuclear real (nrad)
-        try:
-            out["nrad"] = [float(v) for v in m[8].ravel().tolist()] if m.shape[0] > 8 else [None] * ncols
-        except Exception:
-            out["nrad"] = [None] * ncols
+        # Radio nuclear real (nrad): detectar fila válida en lugar de asumir índice fijo
+        out["nrad"] = detectar_fila_nrad(m, ncols) if m.shape[0] > 0 else [None] * ncols
         # Presión
         try:
             out["pres"] = [float(v) for v in m[20].ravel().tolist()] if m.shape[0] > 20 else [None] * ncols
@@ -235,7 +234,7 @@ def leer_frame(output_dir, snap_path):
             "volumen": vols[i],
             "presion": pres[i],
             "nuc_real": nrad[i],
-            "danho": danos[i],
+            "dano": danos[i],
             "adhesion": adhs[i],
             "contactos_celula": contactos_cel[i],
             "ciclo": ciclos[i],
@@ -273,10 +272,10 @@ def agregar_replica(output_dir, out_dir):
         ])
         # --- celulas.csv: una por célula TODAS las variables ---
         # columns: frame, tiempo, id, tipo, estado, x, y, z, radio, volumen, presion,
-        # nuc_real, danho, adhesion, contactos_celula, ciclo, dead_val, dmod_val
+        # nuc_real, dano, adhesion, contactos_celula, ciclo, dead_val, dmod_val
         wc.writerow([
             "frame", "tiempo_min", "id", "tipo", "estado", "x", "y", "z",
-            "radio", "volumen", "presion", "nuc_real", "danho", "adhesion",
+            "radio", "volumen", "presion", "nuc_real", "dano", "adhesion",
             "contactos_celula", "ciclo", "dead_val", "dmod_val"
         ])
         nframes = 0
@@ -325,7 +324,7 @@ def agregar_replica(output_dir, out_dir):
                 wc.writerow([i, fr["tiempo"] if fr["tiempo"] is not None else "",
                              c["id"], c["tipo"], c["estado"], c["x"], c["y"], c["z"],
                              c["radio"], c["volumen"], c["presion"],
-                             c.get("nuc_real"), c.get("danho"), c.get("adhesion"),
+                             c.get("nuc_real"), c.get("dano"), c.get("adhesion"),
                              c.get("contactos_celula"), c.get("ciclo"),
                              c.get("dead_val"), c.get("dmod_val")])
             nframes += 1
@@ -355,7 +354,7 @@ def agregar_experimento(db_path, experiment_id, out_base):
                      "vol_medio_apoptoticas", "presion_media_apoptoticas",
                      "n_celulas_con_datos_mat"])
         wc.writerow(["replica", "frame", "tiempo_min", "id", "tipo", "estado", "x", "y", "z",
-                     "radio", "volumen", "presion", "nuc_real", "danho", "adhesion",
+                     "radio", "volumen", "presion", "nuc_real", "dano", "adhesion",
                      "contactos_celula", "ciclo", "dead_val", "dmod_val"])
         for rnum, od in runs:
             cands = [os.path.join(od, "output"), od] if od else []

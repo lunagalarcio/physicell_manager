@@ -94,17 +94,17 @@ def parse_snapshot_svg(path, bounds, show_nucleus=False):
             try:
                 yval = float(circle.attrib["cy"])
             except Exception:
-                break
+                continue
             if bounds:
                 yval += bounds["ymin"]
                 if (xval < bounds["xmin"] - x_pad) or (xval > bounds["xmax"] + x_pad):
-                    break
+                    continue
                 if (yval < bounds["ymin"] - y_pad) or (yval > bounds["ymax"] + y_pad):
-                    break
+                    continue
             try:
                 rval = float(circle.attrib["r"])
             except Exception:
-                break
+                continue
             xl.append(xval)
             yl.append(yval)
             rl.append(rval)
@@ -204,6 +204,35 @@ def leer_sustratos(output_dir):
         return names
     except Exception:
         return []
+
+
+def detectar_fila_nrad(m, ncols):
+    """Intenta detectar la fila del radio nuclear real (nrad) en cells.mat.
+
+    PhysiCell no garantiza índices fijos entre versiones (en una versión puede estar en
+    la fila 8 y en otra en la 38). Se prueban filas candidatas y se valida que los
+    valores sean positivos y dentro de un rango razonable (1-100 µm), que es lo típico
+    para un radio nuclear celular.
+
+    Retorna lista de floats o None si no se detecta ninguna fila válida.
+    """
+    import numpy as _np
+    filas_candidatas = [8, 38, 9, 10, 11]
+    for fila in filas_candidatas:
+        if m.shape[0] <= fila:
+            continue
+        try:
+            vals = _np.asarray(m[fila].ravel().tolist(), dtype=float)
+        except Exception:
+            continue
+        if len(vals) != ncols:
+            continue
+        positivos = vals[vals > 0]
+        if len(positivos) == 0:
+            continue
+        if _np.all((positivos >= 1.0) & (positivos <= 100.0)):
+            return vals.tolist()
+    return None
 
 
 class VisorPhysiCell(QWidget):
