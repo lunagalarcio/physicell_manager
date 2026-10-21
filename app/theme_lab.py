@@ -44,7 +44,7 @@ TAM_H1 = 20
 TAM_H2 = 14
 TAM_TEXTO = 13
 TAM_MENOR = 11
-TAM_KPI = 22
+TAM_KPI = 30
 
 LAB_QSS = f"""
 * {{
