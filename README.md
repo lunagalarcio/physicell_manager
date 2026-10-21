@@ -12,14 +12,15 @@ Aplicacion de escritorio (Python + PyQt6) para gestionar el ciclo experimental c
 4. Requisitos del sistema
 5. Instalacion
 6. Configuracion del motor PhysiCell
-7. Flujo de uso
-8. Estructura del repositorio
-9. Empaquetado y distribucion
-10. Ejecucion de pruebas
-11. Integracion continua
-12. Licencia
-13. Contribucion
-14. Contacto y soporte
+7. Extension del motor PhysiCell (opcional)
+8. Flujo de uso
+9. Estructura del repositorio
+10. Empaquetado y distribucion
+11. Ejecucion de pruebas
+12. Integracion continua
+13. Licencia
+14. Contribucion
+15. Contacto y soporte
 
 ---
 
@@ -216,7 +217,21 @@ La aplicacion genera una copia del XML de configuracion para cada replica, modif
 
 ---
 
-## 7. Flujo de uso
+## 7. Extension del motor PhysiCell (opcional)
+
+PhysiCell Lab esta disenado como una capa de coordinacion externa y no modifica el motor PhysiCell por defecto. Si se necesita agregar funcionalidad propia al motor, por ejemplo integrar otra librería en `custom.cpp`, el proceso es independiente de esta aplicacion:
+
+1. Localizar el archivo `custom.cpp` (y `custom.h` si corresponde) dentro del directorio fuente del motor PhysiCell, normalmente bajo `PhysiCell/custom_modules/`.
+2. Editar `custom.cpp` para incluir la librería deseada y agregar las reglas de comportamiento, interacciones o módulos personalizados.
+3. Recompilar el motor PhysiCell siguiendo las instrucciones oficiales del proyecto para generar un nuevo ejecutable `project.exe` (Windows) o `project` (Linux/macOS).
+4. En PhysiCell Lab, abrir Preferencias -> Raiz de PhysiCell y apuntar la ruta al nuevo binario compilado.
+5. Crear los experimentos y lanzar las replicaciones como de costumbre; la aplicacion lanzara el binario modificado como proceso externo.
+
+> **Importante:** los cambios en `custom.cpp` afectan al modelo biologico del motor. PhysiCell Lab solo se encarga de lanzar el ejecutable y gestionar las carpetas de salida; no valida ni controla el contenido de `custom.cpp`.
+
+---
+
+## 8. Flujo de uso
 
 | Paso | Accion | Descripcion |
 |---|---|---|
