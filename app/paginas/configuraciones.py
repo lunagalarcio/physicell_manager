@@ -115,7 +115,7 @@ class PaginaConfiguraciones(PaginaBase):
 
     def _nuevo(self):
         import shutil as _s
-        base = os.path.join(r"C:\Users\PC\Downloads\gestor_physicell\gestor_physicell\PhysiCell",
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             "config", "PhysiCell_settings.xml")
         dst = os.path.join(self._dir(), "nueva_config.xml")
         n = 1

@@ -21,9 +21,7 @@ class PaginaPreferencias(PaginaBase):
         h.setObjectName("H1")
         lay.addWidget(h)
 
-        self.root_edit = QLineEdit(
-            r"C:\Users\PC\Downloads\gestor_physicell\gestor_physicell\PhysiCell"
-        )
+        self.root_edit = QLineEdit("")
         self.root_edit.setPlaceholderText("Carpeta raíz de PhysiCell (motor externo)")
         lay.addWidget(QLabel("Raíz de PhysiCell (motor, no se modifica):"))
         lay.addWidget(self.root_edit)

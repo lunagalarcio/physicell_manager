@@ -559,7 +559,7 @@ class NotionWindow(QMainWindow):
         lbl_vis = QLabel("<b>Visualización 2D y 3D integrada:</b> usa la carpeta output de PhysiCell y el slider para navegar estados temporales.")
         lbl_vis.setWordWrap(True)
         self.content_layout.addWidget(lbl_vis)
-        self.visor = VisorPhysiCell(output_dir=r"C:\Users\PC\Downloads\gestor_physicell\gestor_physicell\PhysiCell\output")
+        self.visor = VisorPhysiCell(output_dir="")
         self.visor.setMinimumHeight(380)
         self.content_layout.addWidget(self.visor)
         self.content_layout.addStretch()

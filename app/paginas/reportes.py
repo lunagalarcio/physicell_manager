@@ -1,5 +1,6 @@
 """Página de Reportes: generación de informes HTML/PDF/CSV/JSON por experimento."""
 import os
+import sys
 import glob as _g
 
 from PyQt6.QtWidgets import (
@@ -102,6 +103,11 @@ class PaginaReportes(PaginaBase):
     def _abrir_carpeta(self):
         base = os.path.dirname(self.db_path())
         try:
-            _sp.Popen(["explorer", base])
+            if sys.platform.startswith("win"):
+                os.startfile(base)
+            elif sys.platform.startswith("darwin"):
+                _sp.Popen(["open", base])
+            else:
+                _sp.Popen(["xdg-open", base])
         except Exception as e:
             QMessageBox.warning(self, "Reportes", str(e))
