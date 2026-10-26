@@ -272,4 +272,4 @@ class PaginaResumen(PaginaBase):
 
     def _nuevo(self):
         self.lw.ir("Experimentos")
-        self.lw.paginas["experimentos"]._nuevo()
+        self.lw.paginas["Experimentos"]._nuevo()

@@ -313,8 +313,10 @@ def _verify_password(password: str, stored_hash: str) -> bool:
     """Verifica una contraseña contra su hash almacenado."""
     try:
         algorithm, iterations, salt, hash_value = stored_hash.split("$")
+        # "pbkdf2_sha256" no es un nombre de hash válido para pbkdf2_hmac; se extrae solo "sha256"
+        hash_name = algorithm.split("_", 1)[1] if "_" in algorithm else algorithm
         pwd_hash = hashlib.pbkdf2_hmac(
-            algorithm,
+            hash_name,
             password.encode("utf-8"),
             salt.encode("utf-8"),
             int(iterations),
