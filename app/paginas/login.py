@@ -37,7 +37,7 @@ class PaginaLogin(PaginaBase):
         tarjeta.setFixedWidth(420)
         tarjeta.setFixedHeight(520)
 
-        tlay = QVBoxLayout(tarjeta)
+        tlay = tarjeta.layout_interno()
         tlay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
         tlay.setSpacing(ESPACIO_M)
 
