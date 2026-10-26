@@ -141,6 +141,10 @@ class LabWindow(QMainWindow):
         self.btn_logout.setVisible(True)
         self.stack.setCurrentIndex(self._seccion_widget["Resumen"])
         self.ir("Resumen")
+        # Forzar recálculo del layout para que el sidebar y el contenido se muestren
+        self.centralWidget().updateGeometry()
+        self.update()
+        self.repaint()
 
     def cerrar_sesion(self):
         """Cierra la sesión y regresa a la pantalla de login en la misma ventana."""
@@ -154,6 +158,10 @@ class LabWindow(QMainWindow):
         self.pagina_login.edit_user.clear()
         self.pagina_login.edit_pass.clear()
         self.pagina_login.lbl_error.setVisible(False)
+        # Forzar recálculo del layout
+        self.centralWidget().updateGeometry()
+        self.update()
+        self.repaint()
 
     # ---------- navegación ----------
 
