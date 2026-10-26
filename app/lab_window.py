@@ -61,6 +61,7 @@ class LabWindow(QMainWindow):
         # PÁGINA 0: Login (misma ventana, sin segunda ventana)
         # =====================================================
         self.pagina_login = PaginaLogin(self)
+        self.pagina_login.build()
         self.stack_principal.addWidget(self.pagina_login)
 
         # =====================================================
