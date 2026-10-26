@@ -58,7 +58,8 @@ class PaginaComparacion(PaginaBase):
         uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
         filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
         self.exp_combo.clear()
-        for eid, title in filas:
+        for fila in filas:
+            eid, title = fila[0], fila[1]
             self.exp_combo.addItem(f"#{eid} {title}", eid)
 
     def _agregar(self):
