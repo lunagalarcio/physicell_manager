@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS runs (
     end_time DATETIME,
     output_dir TEXT,
     escenario_id INTEGER,
+    configuracion_id INTEGER,
     FOREIGN KEY (experiment_id) REFERENCES experiments(id)
 );
 CREATE TABLE IF NOT EXISTS escenarios (
@@ -63,6 +64,16 @@ CREATE TABLE IF NOT EXISTS videos (
     ruta_archivo TEXT,
     fps INTEGER DEFAULT 1,
     frames INTEGER DEFAULT 0,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+);
+CREATE TABLE IF NOT EXISTS configuraciones (
+    id INTEGER PRIMARY KEY,
+    experiment_id INTEGER NOT NULL,
+    nombre TEXT NOT NULL DEFAULT 'base',
+    xml_path TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    es_activa INTEGER NOT NULL DEFAULT 0,
     creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (experiment_id) REFERENCES experiments(id)
 );

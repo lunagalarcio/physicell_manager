@@ -74,25 +74,9 @@ def exp_estado(n_runs, n_running, n_failed, n_completed, xml_ok):
 
 
 def estadisticas_experimento(conn, eid):
-    """Devuelve estadísticas de runs para un experimento desde la DB."""
-    cur = conn.cursor()
-    cur.execute(
-        """SELECT COUNT(r.id),
-                  SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END),
-                  SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END),
-                  SUM(CASE WHEN r.status IN ('failed', 'cancelled') THEN 1 ELSE 0 END),
-                  MAX(r.start_time)
-           FROM runs r WHERE r.experiment_id = ?""",
-        (eid,),
-    )
-    row = cur.fetchone()
-    return {
-        "total": row[0] or 0,
-        "completadas": row[1] or 0,
-        "en_curso": row[2] or 0,
-        "falladas": row[3] or 0,
-        "ultima_fecha": row[4],
-    }
+    """Devuelve estadísticas de runs para un experimento (delega en simulador)."""
+    from .. import simulador as SIM
+    return SIM.estadisticas_experimento(conn, eid)
 
 
 def estado_general_experimento(n_runs, n_running, n_failed, n_completed, xml_ok):
@@ -105,6 +89,25 @@ def estado_general_experimento(n_runs, n_running, n_failed, n_completed, xml_ok)
     4. Tiene XML válido pero sin runs → Configurado
     5. Sin XML → Sin configurar
     """
+    # Defensa contra valores None o str (pueden venir de SUM sin COALESCE en consultas
+    # antiguas o de datos preexistentes en la base de datos de usuario)
+    try:
+        n_runs = int(n_runs or 0)
+    except (TypeError, ValueError):
+        n_runs = 0
+    try:
+        n_running = int(n_running or 0)
+    except (TypeError, ValueError):
+        n_running = 0
+    try:
+        n_failed = int(n_failed or 0)
+    except (TypeError, ValueError):
+        n_failed = 0
+    try:
+        n_completed = int(n_completed or 0)
+    except (TypeError, ValueError):
+        n_completed = 0
+
     if n_running > 0:
         return "En ejecución", "en_ejecucion"
     if n_failed > 0:
@@ -320,6 +323,18 @@ class ExperimentoCard(Tarjeta):
         self.eid = eid
         self.setMinimumWidth(300)
         self.setMaximumWidth(420)
+
+        # Conversión defensiva: los conteos pueden venir como str/None de DBs preexistentes
+        def _to_int(valor, por_defecto=0):
+            try:
+                return int(valor or 0)
+            except (TypeError, ValueError):
+                return por_defecto
+
+        total_runs = _to_int(total_runs)
+        completadas = _to_int(completadas)
+        en_curso = _to_int(en_curso)
+        falladas = _to_int(falladas)
 
         lay = self.layout_interno()
         lay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)

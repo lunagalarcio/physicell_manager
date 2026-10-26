@@ -17,6 +17,9 @@ from .nucleo import init_database
 from .paginas.base import PaginaBase
 from .paginas.resumen import PaginaResumen
 from .paginas.experimentos import PaginaExperimentos
+from .paginas.configuraciones import PaginaConfiguraciones
+from .paginas.ejecuciones import PaginaEjecuciones
+from .paginas.resultados_global import PaginaResultados
 from .paginas.comparacion_global import PaginaComparacion
 from .paginas.reportes import PaginaReportes
 from .paginas.preferencias import PaginaPreferencias
@@ -58,7 +61,8 @@ class LabWindow(QMainWindow):
         self.nav_btns = {}
         self.stack = QStackedWidget()
         self._secciones = [
-            "Resumen", "Experimentos", "Comparación", "Reportes", "Ajustes",
+            "Resumen", "Experimentos", "Configuraciones", "Ejecuciones",
+            "Resultados", "Comparación", "Reportes", "Ajustes",
         ]
         for i, name in enumerate(self._secciones):
             b = QPushButton(name)
@@ -78,6 +82,9 @@ class LabWindow(QMainWindow):
         for nombre, cls in [
             ("Resumen", PaginaResumen),
             ("Experimentos", PaginaExperimentos),
+            ("Configuraciones", PaginaConfiguraciones),
+            ("Ejecuciones", PaginaEjecuciones),
+            ("Resultados", PaginaResultados),
             ("Comparación", PaginaComparacion),
             ("Reportes", PaginaReportes),
             ("Ajustes", PaginaPreferencias),
@@ -135,33 +142,25 @@ class LabWindow(QMainWindow):
         sub.setWordWrap(True)
         lay.addWidget(sub)
 
+        from .. import simulador as SIM
         from .nucleo import get_db_path
         conn = sqlite3.connect(get_db_path())
-        cur = conn.cursor()
 
         for eid in experiment_ids:
             try:
-                cur.execute("SELECT title, config_xml_path FROM experiments WHERE id=?", (eid,))
-                row = cur.fetchone()
-                title = row[0] if row else f"Experimento {eid}"
-                cfg = row[1] if row else ""
+                row = SIM.obtener_experimento(conn, eid)
+                title = row[1] if row else f"Experimento {eid}"
+                cfg = row[4] if row else ""
             except Exception:
                 title = f"Experimento {eid}"
                 cfg = ""
 
             try:
-                cur.execute(
-                    "SELECT COUNT(*), SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END), "
-                    "SUM(CASE WHEN status='running' THEN 1 ELSE 0 END), "
-                    "SUM(CASE WHEN status IN ('failed','cancelled') THEN 1 ELSE 0 END) "
-                    "FROM runs WHERE experiment_id=?",
-                    (eid,),
-                )
-                stats = cur.fetchone()
-                total = stats[0] or 0
-                comp = stats[1] or 0
-                run = stats[2] or 0
-                fail = stats[3] or 0
+                stats = SIM.estadisticas_experimento(conn, eid)
+                total = stats["total"]
+                comp = stats["completadas"]
+                run = stats["en_curso"]
+                fail = stats["falladas"]
             except Exception:
                 total = comp = run = fail = 0
 
@@ -195,6 +194,7 @@ class LabWindow(QMainWindow):
         btn_cerrar.clicked.connect(dlg.reject)
         lay.addWidget(btn_cerrar)
 
+        conn.close()
         dlg.exec()
 
     def refrescar_detalle(self):

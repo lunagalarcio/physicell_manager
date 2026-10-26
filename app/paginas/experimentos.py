@@ -56,32 +56,7 @@ class PaginaExperimentos(PaginaBase):
 
         q = (self.search.text() or "").lower().strip()
         conn = self.conn()
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                """SELECT e.id, e.title, e.description, e.tags, e.config_xml_path,
-                          e.binary_path, e.custom_cpp_path, e.custom_h_path, e.last_modified,
-                          COUNT(r.id) as total_runs,
-                          SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN r.status IN ('failed', 'cancelled')
-                                   THEN 1 ELSE 0 END),
-                          MAX(r.start_time)
-                   FROM experiments e
-                   LEFT JOIN runs r ON e.id = r.experiment_id
-                   GROUP BY e.id
-                   ORDER BY e.id DESC"""
-            )
-            filas = cur.fetchall()
-        except Exception:
-            cur.execute(
-                "SELECT id, title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path, last_modified "
-                "FROM experiments ORDER BY id DESC"
-            )
-            filas = [
-                (a, b, c, d, e, f, g, h, i, 0, 0, 0, 0, None)
-                for a, b, c, d, e, f, g, h, i in cur.fetchall()
-            ]
+        filas = SIM.listar_experimentos_con_estadisticas(conn)
         conn.close()
 
         col = fila = 0
@@ -150,10 +125,9 @@ class PaginaExperimentos(PaginaBase):
     def _editar_meta(self, eid):
         from PyQt6.QtWidgets import QLineEdit
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT title, description, tags, binary_path, custom_cpp_path, custom_h_path FROM experiments WHERE id=?", (eid,))
-        t, d, g, bp, cpp, h = cur.fetchone() or ("", "", "", "", "", "")
+        row = SIM.obtener_experimento(conn, eid)
         conn.close()
+        t, d, g, bp, cpp, h = (row[1], row[2], row[3] or "", row[5] or "", row[6] or "", row[7] or "") if row else ("", "", "", "", "", "")
 
         dlg = QDialog(self.lw)
         dlg.setWindowTitle("Editar experimento")
@@ -242,14 +216,13 @@ class PaginaExperimentos(PaginaBase):
             return
 
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT MAX(id) FROM experiments")
-        nid = ((cur.fetchone()[0] or 0) + 1)
-        cur.execute(
-            "INSERT INTO experiments (id, title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path) VALUES (?,?,?,?,?,?,?,?)",
-            (nid, t1.text().strip() or f"Experimento {nid}", t2.text().strip(), t3.text().strip(), "", "", "", ""),
+        nid = SIM.crear_experimento(
+            conn,
+            t1.text().strip() or "Nuevo experimento",
+            t2.text().strip(),
+            t3.text().strip(),
+            "",
         )
-        conn.commit()
         conn.close()
         self.refrescar()
         self.lw.refrescar_resumen()

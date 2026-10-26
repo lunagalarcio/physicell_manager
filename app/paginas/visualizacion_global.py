@@ -62,13 +62,9 @@ class PaginaVisualizacion(PaginaBase):
         self._cargar_exps()
 
     def _cargar_exps(self):
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
-        try:
-            cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            filas = cur.fetchall()
-        except Exception:
-            filas = []
+        filas = SIM.listar_experimentos(conn)
         conn.close()
         self.exp_combo.clear()
         for eid, title in filas:

@@ -121,24 +121,20 @@ class PaginaResumen(PaginaBase):
         self.kpi_row.addStretch()
 
     def _contar(self):
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT id, config_xml_path FROM experiments")
-        exps = cur.fetchall()
+        exps = SIM.listar_experimentos_con_estadisticas(conn)
+        conn.close()
         total = len(exps)
         cfg_ok = 0
-        for _, c in exps:
-            if c and os.path.isfile(c) and _validar_ok(c):
+        for r in exps:
+            cfg = r[4] if len(r) > 4 else ""
+            if cfg and os.path.isfile(cfg) and _validar_ok(cfg):
                 cfg_ok += 1
-        try:
-            cur.execute("SELECT status, COUNT(*) FROM runs GROUP BY status")
-            st = dict(cur.fetchall())
-        except Exception:
-            st = {}
-        conn.close()
-        comp = st.get("completed", 0)
-        curso = st.get("running", 0)
-        fallo = st.get("failed", 0) + st.get("cancelled", 0)
+        # Sumar estadísticas de runs desde las filas ya obtenidas
+        comp = sum(r[10] or 0 for r in exps if len(r) > 10)
+        curso = sum(r[11] or 0 for r in exps if len(r) > 11)
+        fallo = sum(r[12] or 0 for r in exps if len(r) > 12)
         return total, cfg_ok, comp, curso, fallo
 
     def _tarjetas(self):
@@ -149,34 +145,10 @@ class PaginaResumen(PaginaBase):
                 w.deleteLater()
 
         q = (self.search.text() or "").lower().strip()
+        q = (self.search.text() or "").lower().strip()
         conn = self.conn()
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                """SELECT e.id, e.title, e.description, e.tags, e.config_xml_path,
-                          e.last_modified,
-                          COUNT(r.id) as total_runs,
-                          SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN r.status IN ('failed', 'cancelled')
-                                   THEN 1 ELSE 0 END),
-                          MAX(r.start_time)
-                   FROM experiments e
-                   LEFT JOIN runs r ON e.id = r.experiment_id
-                   GROUP BY e.id
-                   ORDER BY e.id DESC
-                   LIMIT 12"""
-            )
-            filas = cur.fetchall()
-        except Exception:
-            cur.execute(
-                "SELECT id, title, description, tags, config_xml_path, last_modified "
-                "FROM experiments ORDER BY id DESC LIMIT 12"
-            )
-            filas = [
-                (a, b, c, d, e, f, 0, 0, 0, 0, None)
-                for a, b, c, d, e, f in cur.fetchall()
-            ]
+        filas = SIM.listar_experimentos_con_estadisticas(conn)[:12]
+        conn.close()
         conn.close()
 
         col = fila = 0
@@ -247,11 +219,11 @@ class PaginaResumen(PaginaBase):
 
     def _editar_meta(self, eid):
         from PyQt6.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT title, description, tags FROM experiments WHERE id=?", (eid,))
-        t, d, g = cur.fetchone() or ("", "", "")
+        row = SIM.obtener_experimento(conn, eid)
         conn.close()
+        t, d, g = (row[1], row[2], row[3] or "") if row else ("", "", "")
 
         dlg = QDialog(self.lw)
         dlg.setWindowTitle("Editar experimento")

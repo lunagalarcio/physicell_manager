@@ -8,6 +8,7 @@ import os
 import sys
 import sqlite3
 import traceback
+from datetime import datetime
 from PyQt6.QtCore import QThread, pyqtSignal
 from .simulador import generar_replica_config, registrar_run, actualizar_run
 from .motor_physicell import MotorPhysiCell
@@ -18,13 +19,15 @@ class ReplicaWorker(QThread):
     done = pyqtSignal(dict)
     fail = pyqtSignal(str)
 
-    def __init__(self, experiment_id, base_xml, n_replicas, exe_path="", db_path=""):
+    def __init__(self, experiment_id, base_xml, n_replicas, exe_path="", db_path="",
+                 configuracion_id=None):
         super().__init__()
         self.experiment_id = experiment_id
         self.base_xml = base_xml
         self.n_replicas = n_replicas
         self.exe_path = exe_path
         self.db_path = db_path
+        self.configuracion_id = configuracion_id
         self._stop = False
 
     def stop(self):
@@ -51,26 +54,42 @@ class ReplicaWorker(QThread):
                 rep_dir = os.path.join(base_dir, f"replica_{i}")
                 os.makedirs(rep_dir, exist_ok=True)
                 out_xml = os.path.join(rep_dir, f"replica_{i}.xml")
-                generar_replica_config(self.base_xml, out_xml, seed=1000 + i, output_folder=os.path.join(rep_dir, "output"))
-                run_id = registrar_run(conn, self.experiment_id, i, status="running", output_dir=rep_dir)
-                if self.exe_path and os.path.isfile(self.exe_path):
-                    base_pct = int((i - 1) * 100 / self.n_replicas)
-                    paso = 100 / self.n_replicas
-                    def _cb(sim_t, _ln, _b=base_pct, _p=paso):
-                        if max_t:
-                            pct = _b + min(1.0, sim_t / max_t) * _p
-                            self.prog.emit(int(pct), f"Replica {i}/{self.n_replicas} t={sim_t:.0f}/{max_t:.0f} min")
-                    r = motor.ejecutar_cancelable(self.exe_path, out_xml, cwd=os.path.dirname(self.exe_path),
-                                                  timeout_ms=600000, stop_flag=lambda: self._stop, linea_cb=_cb)
-                    if r.get("cancelled"):
-                        actualizar_run(conn, run_id, "cancelled", end=True)
-                        conn.close()
-                        self.fail.emit("Cancelado por usuario")
-                        return
-                    actualizar_run(conn, run_id, "completed" if r.get("ok") else "failed", end=True)
-                else:
-                    # Sin binario PhysiCell no hay simulacion: solo config generada
-                    actualizar_run(conn, run_id, "registered", end=True)
+                try:
+                    generar_replica_config(self.base_xml, out_xml, seed=1000 + i,
+                                           output_folder=os.path.join(rep_dir, "output"))
+                    run_id = registrar_run(conn, self.experiment_id, i, status="running",
+                                           output_dir=rep_dir, configuracion_id=self.configuracion_id)
+                    if self.exe_path and os.path.isfile(self.exe_path):
+                        base_pct = int((i - 1) * 100 / self.n_replicas)
+                        paso = 100 / self.n_replicas
+                        def _cb(sim_t, _ln, _b=base_pct, _p=paso):
+                            if max_t:
+                                pct = _b + min(1.0, sim_t / max_t) * _p
+                                self.prog.emit(int(pct), f"Replica {i}/{self.n_replicas} t={sim_t:.0f}/{max_t:.0f} min")
+                        r = motor.ejecutar_cancelable(self.exe_path, out_xml, cwd=os.path.dirname(self.exe_path),
+                                                      timeout_ms=600000, stop_flag=lambda: self._stop, linea_cb=_cb)
+                        if r.get("cancelled"):
+                            actualizar_run(conn, run_id, "cancelled", end=True,
+                                           configuracion_id=self.configuracion_id)
+                            conn.close()
+                            self.fail.emit("Cancelado por usuario")
+                            return
+                        actualizar_run(conn, run_id, "completed" if r.get("ok") else "failed", end=True,
+                                       configuracion_id=self.configuracion_id)
+                    else:
+                        # Sin binario PhysiCell no hay simulacion: solo config generada
+                        actualizar_run(conn, run_id, "registered", end=True,
+                                       configuracion_id=self.configuracion_id)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    try:
+                        if 'run_id' in locals():
+                            actualizar_run(conn, run_id, "failed", end=True,
+                                           configuracion_id=self.configuracion_id)
+                    except Exception:
+                        pass
+                    self.fail.emit(f"Réplica {i} falló: {e}\n{tb[-1000:]}")
+                    return
                 self.prog.emit(int(i * 100 / self.n_replicas), f"Replica {i}/{self.n_replicas} lista (PhysiCell)")
             conn.close()
             self.done.emit({"experiment_id": self.experiment_id, "replicas": self.n_replicas})
@@ -180,6 +199,52 @@ def init_database():
         """)
     except Exception:
         pass
+
+    # --- Trazabilidad de configuraciones versionadas ---
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS configuraciones (
+                id INTEGER PRIMARY KEY,
+                experiment_id INTEGER NOT NULL,
+                nombre TEXT NOT NULL DEFAULT 'base',
+                xml_path TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                es_activa INTEGER NOT NULL DEFAULT 0,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+            )
+        """)
+    except Exception:
+        pass
+
+    # Vincular escenarios a una configuración (versión exacta del XML usada)
+    try:
+        cur.execute("ALTER TABLE escenarios ADD COLUMN configuracion_id INTEGER")
+    except Exception:
+        pass
+
+    # Vincular cada ejecución a la configuración exacta que usó
+    try:
+        cur.execute("ALTER TABLE runs ADD COLUMN configuracion_id INTEGER")
+    except Exception:
+        pass
+
+    # Si no hay configuración base para experimentos existentes, crearla a partir de config_xml_path
+    try:
+        cur.execute("SELECT id, config_xml_path FROM experiments WHERE config_xml_path IS NOT NULL AND config_xml_path != ''")
+        for eid, xml_path in cur.fetchall():
+            cur.execute(
+                "SELECT COUNT(*) FROM configuraciones WHERE experiment_id=? AND nombre='base'",
+                (eid,),
+            )
+            if cur.fetchone()[0] == 0:
+                cur.execute(
+                    "INSERT INTO configuraciones (experiment_id, nombre, xml_path, version, es_activa) VALUES (?,?,?,1,1)",
+                    (eid, "base", xml_path),
+                )
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     print(f"DB inicializada: {db_path}")
@@ -206,3 +271,140 @@ def listar_videos(conn, experiment_id):
         return cur.fetchall()
     except Exception:
         return []
+
+
+# ---------- Configuraciones versionadas (trazabilidad) ----------
+
+def _copiar_xml_resguardo(db_path, experiment_id, version, xml_path):
+    """Copia el XML a una carpeta de resguardo inmutable por experimento.
+
+    Retorna la ruta de la copia si tuvo éxito, o la ruta original si no se pudo copiar.
+    """
+    if not xml_path or not os.path.isfile(xml_path):
+        return xml_path
+    try:
+        data_dir = os.path.dirname(db_path) if db_path else ""
+        resguardo_dir = os.path.join(data_dir, "configs", f"exp_{experiment_id}")
+        os.makedirs(resguardo_dir, exist_ok=True)
+        nombre_archivo = f"v{version}.xml"
+        destino = os.path.join(resguardo_dir, nombre_archivo)
+        if os.path.abspath(xml_path) != os.path.abspath(destino):
+            import shutil
+            shutil.copy2(xml_path, destino)
+        return destino
+    except Exception:
+        return xml_path
+
+
+def crear_configuracion(conn, experiment_id, nombre, xml_path, version=None,
+                        activar=True, db_path=None, copiar_xml=False):
+    """Registra una nueva versión de configuración para un experimento.
+
+    Si se indica version, se usa esa; si no, se calcula la siguiente disponible.
+    Solo una configuración por experimento puede estar activa a la vez.
+    Si copiar_xml=True y se indica db_path, se copia el archivo XML a una
+    carpeta de resguardo inmutable antes de registrar la ruta.
+    """
+    cur = conn.cursor()
+    if version is None:
+        cur.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM configuraciones WHERE experiment_id=?",
+            (experiment_id,),
+        )
+        version = cur.fetchone()[0]
+    if activar:
+        cur.execute(
+            "UPDATE configuraciones SET es_activa=0 WHERE experiment_id=?",
+            (experiment_id,),
+        )
+    xml_registro = xml_path
+    if copiar_xml and db_path:
+        xml_registro = _copiar_xml_resguardo(db_path, experiment_id, version, xml_path)
+    cur.execute(
+        "INSERT INTO configuraciones (experiment_id, nombre, xml_path, version, es_activa) "
+        "VALUES (?,?,?,?,?)",
+        (experiment_id, nombre, xml_registro, version, 1 if activar else 0),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def configuracion_activa(conn, experiment_id):
+    """Retorna (id, nombre, xml_path, version) de la configuración activa o None."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, nombre, xml_path, version FROM configuraciones "
+            "WHERE experiment_id=? AND es_activa=1 ORDER BY version DESC LIMIT 1",
+            (experiment_id,),
+        )
+        return cur.fetchone()
+    except Exception:
+        return None
+
+
+def listar_configuraciones(conn, experiment_id):
+    """Lista todas las configuraciones (versiones) de un experimento."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, nombre, xml_path, version, es_activa, creado_en "
+            "FROM configuraciones WHERE experiment_id=? ORDER BY version",
+            (experiment_id,),
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+
+
+def activar_configuracion(conn, configuracion_id):
+    """Marca una configuración como activa (desactiva las demás de su experimento)."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT experiment_id FROM configuraciones WHERE id=?", (configuracion_id,)
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    experiment_id = row[0]
+    cur.execute(
+        "UPDATE configuraciones SET es_activa=0 WHERE experiment_id=?",
+        (experiment_id,),
+    )
+    cur.execute(
+        "UPDATE configuraciones SET es_activa=1 WHERE id=?", (configuracion_id,)
+    )
+    conn.commit()
+    return True
+
+
+def run_con_configuracion(conn, experiment_id, run_number, status="pending",
+                          output_dir="", configuracion_id=None, escenario_id=None):
+    """Registra una ejecución vinculada a una configuración exacta."""
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO runs (experiment_id, run_number, status, start_time, output_dir, "
+        "configuracion_id, escenario_id) VALUES (?,?,?,?,?,?,?)",
+        (experiment_id, run_number, status,
+         datetime.now().isoformat(timespec="seconds"), output_dir,
+         configuracion_id, escenario_id),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def actualizar_run_con_config(conn, run_id, status, end=False, configuracion_id=None):
+    """Actualiza el estado de una ejecución, opcionalmente reasignando su configuración."""
+    cur = conn.cursor()
+    if end:
+        cur.execute(
+            "UPDATE runs SET status=?, end_time=?, configuracion_id=? WHERE id=?",
+            (status, datetime.now().isoformat(timespec="seconds"),
+             configuracion_id, run_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE runs SET status=?, configuracion_id=? WHERE id=?",
+            (status, configuracion_id, run_id),
+        )
+    conn.commit()

@@ -62,19 +62,25 @@ class PaginaDetalle(PaginaBase):
         lay = layout
 
         # ---------- Encabezado del experimento ----------
-        conn = self.conn()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT title, description, tags, config_xml_path, binary_path, custom_cpp_path, custom_h_path, created_at, last_modified "
-            "FROM experiments WHERE id=?", (eid,)
-        )
-        r = cur.fetchone() or ("", "", "", "", "", "", "", None, None)
-        conn.close()
-        title, desc, tags, cfg, binp, cpp, h, creado, modif = r
-        runs = self._runs_exp(eid)
-        conn2 = self.conn()
-        n_esc = len(SIM.listar_escenarios(conn2, eid))
-        conn2.close()
+        from .. import servicios as SERV
+        info = SERV.obtener_experimento_completo(self.db_path(), eid)
+        if not info.get("ok"):
+            title, desc, tags, cfg, binp, cpp, h, creado, modif = ("",) * 8
+            runs = []
+            n_esc = 0
+        else:
+            exp = info["experimento"]
+            title = exp["title"] or ""
+            desc = exp["description"] or ""
+            tags = exp["tags"] or ""
+            cfg = exp["config_xml_path"] or ""
+            binp = exp["binary_path"] or ""
+            cpp = exp["custom_cpp_path"] or ""
+            h = exp["custom_h_path"] or ""
+            creado = exp["created_at"]
+            modif = exp["last_modified"]
+            runs = self._runs_exp(eid)
+            n_esc = len(info["escenarios"])
         n_run = sum(1 for x in runs if x[2] == "running")
         n_fail = sum(1 for x in runs if x[2] in ("failed", "cancelled"))
         n_ok = sum(1 for x in runs if x[2] == "completed")
@@ -305,15 +311,18 @@ class PaginaDetalle(PaginaBase):
                     "XML inválido: " + "; ".join(v.get("errores", []))
                 )
                 return
-        conn = self.conn()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE experiments SET config_xml_path=?, binary_path=?, custom_cpp_path=?, custom_h_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-            (p, self.cfg_exe.text().strip(), self.cfg_cpp.text().strip(), self.cfg_h.text().strip(), self.current_experiment_id),
+        from .. import servicios as SERV
+        r = SERV.actualizar_rutas_experimento(
+            self.db_path(), self.current_experiment_id,
+            config_xml_path=p,
+            binary_path=self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else "",
+            custom_cpp_path=self.cfg_cpp.text().strip() if hasattr(self, "cfg_cpp") else "",
+            custom_h_path=self.cfg_h.text().strip() if hasattr(self, "cfg_h") else "",
         )
-        conn.commit()
-        conn.close()
-        self.lw._last_exe = self.cfg_exe.text().strip()
+        if not r.get("ok"):
+            QMessageBox.warning(self.lw, "Configuración", r.get("error", "Error al guardar"))
+            return
+        self.lw._last_exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
         QMessageBox.information(self.lw, "Configuración", "Guardada en este experimento.")
         self.lw.refrescar_exps()
         self.lw.refrescar_resumen()
@@ -487,14 +496,14 @@ class PaginaDetalle(PaginaBase):
         hh = self.cfg_h.text().strip() if hasattr(self, "cfg_h") else ""
 
         # Persistencia automática: guarda el motor y custom.cpp/h en la BD aunque no se cierre la pestaña
-        conn = self.conn()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE experiments SET binary_path=?, custom_cpp_path=?, custom_h_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-            (exe, cpp, hh, eid),
+        from .. import servicios as SERV
+        SERV.actualizar_rutas_experimento(
+            self.db_path(), eid,
+            config_xml_path=base,
+            binary_path=exe,
+            custom_cpp_path=cpp,
+            custom_h_path=hh,
         )
-        conn.commit()
-        conn.close()
         self.lw._last_exe = exe
 
         if not exe:
@@ -640,11 +649,10 @@ class PaginaDetalle(PaginaBase):
         except Exception:
             pass
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT title FROM experiments WHERE id=?", (self.current_experiment_id,))
-        r = cur.fetchone()
+        r = SIM.obtener_experimento(conn, self.current_experiment_id)
         conn.close()
-        abrir_vtk(self.lw, d or "", titulo=f"Tumor 3D — {(r[0] if r else '') or self.current_experiment_id}")
+        titulo = r[1] if r else ""
+        abrir_vtk(self.lw, d or "", titulo=f"Tumor 3D — {titulo or self.current_experiment_id}")
 
     def _refrescar_videos(self):
         from ..nucleo import listar_videos, get_db_path
@@ -695,13 +703,7 @@ class PaginaDetalle(PaginaBase):
 
         if r.get("ok"):
             conn = self.conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT run_number FROM runs WHERE experiment_id=? AND output_dir=? ORDER BY run_number DESC LIMIT 1",
-                (eid, output_dir),
-            )
-            row = cur.fetchone()
-            run_num = row[0] if row else 0
+            run_num = SIM.obtener_run_por_output_dir(conn, eid, output_dir)
             conn.close()
             from ..nucleo import registrar_video, get_db_path
             conn2 = sqlite3.connect(get_db_path())
@@ -1114,16 +1116,12 @@ class PaginaDetalle(PaginaBase):
         v.addWidget(info)
 
         conn = self.conn()
-        cur = conn.cursor()
-        cur.execute("SELECT title, config_xml_path, created_at FROM experiments WHERE id=?", (eid,))
-        t, cfg_path, creado = cur.fetchone() or ("", "", None)
-        cur.execute("SELECT COUNT(*) FROM escenarios WHERE experiment_id=?", (eid,))
-        n_esc = cur.fetchone()[0]
-        cur.execute(
-            "SELECT run_number, status, start_time, end_time, output_dir FROM runs WHERE experiment_id=? ORDER BY run_number",
-            (eid,),
-        )
-        runs = cur.fetchall()
+        exp_row = SIM.obtener_experimento(conn, eid)
+        t = exp_row[1] if exp_row else ""
+        cfg_path = exp_row[4] if exp_row else ""
+        creado = exp_row[8] if exp_row else None
+        n_esc = len(SIM.listar_escenarios(conn, eid))
+        runs = SIM.listar_runs(conn, eid)
         conn.close()
         traza = QLabel(
             f"<b>{t}</b> (#{eid})<br>Config: {cfg_path or '—'}<br>Creado: {creado or '—'}<br>"

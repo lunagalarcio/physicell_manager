@@ -16,6 +16,7 @@ from .base import (
 )
 from ..config_manager import importar_config, leer_texto, guardar_texto
 from ..xml_validator import validar_config as vc, validar_texto
+from .. import servicios as SERV
 
 
 class PaginaConfiguraciones(PaginaBase):
@@ -210,13 +211,9 @@ class PaginaConfiguraciones(PaginaBase):
         if not p:
             QMessageBox.warning(self, "Configuraciones", "Selecciona un archivo de la tabla.")
             return
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
-        try:
-            cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            filas = cur.fetchall()
-        except Exception:
-            filas = []
+        filas = SIM.listar_experimentos(conn)
         conn.close()
         if not filas:
             QMessageBox.warning(self, "Configuraciones", "No hay experimentos. Crea uno primero.")
@@ -237,12 +234,10 @@ class PaginaConfiguraciones(PaginaBase):
         btns.rejected.connect(dlg.reject)
         if dlg.exec():
             eid = cb.currentData()
-            conn = self.conn()
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE experiments SET config_xml_path=?, last_modified=CURRENT_TIMESTAMP WHERE id=?",
-                (p, eid),
+            r = SERV.actualizar_rutas_experimento(
+                self.db_path(), eid, config_xml_path=p,
             )
-            conn.commit()
-            conn.close()
-            QMessageBox.information(self, "Configuraciones", f"Asociado al experimento #{eid}.")
+            if not r.get("ok"):
+                QMessageBox.warning(self, "Configuraciones", r.get("error", "Error al asociar"))
+            else:
+                QMessageBox.information(self, "Configuraciones", f"Asociado al experimento #{eid}.")

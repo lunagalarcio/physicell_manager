@@ -53,13 +53,9 @@ class PaginaComparacion(PaginaBase):
         self._cargar_exps()
 
     def _cargar_exps(self):
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
-        try:
-            cur.execute("SELECT id, title FROM experiments ORDER BY id DESC")
-            filas = cur.fetchall()
-        except Exception:
-            filas = []
+        filas = SIM.listar_experimentos(conn)
         conn.close()
         self.exp_combo.clear()
         for eid, title in filas:
@@ -84,9 +80,8 @@ class PaginaComparacion(PaginaBase):
         cur = conn.cursor()
         for eid in self.seleccionados:
             try:
-                cur.execute("SELECT title FROM experiments WHERE id=?", (eid,))
-                row = cur.fetchone()
-                title = row[0] if row else f"Experimento {eid}"
+                row = SIM.obtener_experimento(conn, eid)
+                title = row[1] if row else f"Experimento {eid}"
             except Exception:
                 title = f"Experimento {eid}"
             fila = QWidget()

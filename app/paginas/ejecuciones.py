@@ -31,14 +31,10 @@ class PaginaEjecuciones(PaginaBase):
         return self
 
     def refrescar(self):
+        from .. import simulador as SIM
         conn = self.conn()
-        cur = conn.cursor()
         try:
-            cur.execute(
-                "SELECT e.title, r.run_number, r.status, r.start_time, r.end_time, r.output_dir "
-                "FROM runs r JOIN experiments e ON e.id=r.experiment_id ORDER BY r.start_time DESC LIMIT 200"
-            )
-            filas = cur.fetchall()
+            filas = SIM.listar_todos_los_runs(conn)
         except Exception:
             filas = []
         conn.close()
