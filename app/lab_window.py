@@ -12,7 +12,7 @@ import sys
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QButtonGroup, QStackedWidget
+    QButtonGroup, QStackedWidget, QSizePolicy
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
@@ -46,6 +46,7 @@ class LabWindow(QMainWindow):
         self.auth_service = SERV.AuthService(get_db_path())
 
         central = QWidget()
+        central.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
@@ -55,6 +56,7 @@ class LabWindow(QMainWindow):
         self.side = QWidget()
         self.side.setObjectName("SideBar")
         self.side.setFixedWidth(212)
+        self.side.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         sl = QVBoxLayout(self.side)
         sl.setContentsMargins(14, 18, 14, 18)
         sl.setSpacing(6)
@@ -69,6 +71,7 @@ class LabWindow(QMainWindow):
         self.nav_group.setExclusive(True)
         self.nav_btns = {}
         self.stack = QStackedWidget()
+        self.stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._secciones = [
             "Resumen", "Experimentos", "Configuraciones", "Ejecuciones",
             "Resultados", "Comparación", "Reportes", "Ajustes",
@@ -131,7 +134,7 @@ class LabWindow(QMainWindow):
         """Muestra la pantalla de login en la misma ventana, ocultando el sidebar."""
         self.usuario_actual = None
         self.side.setVisible(False)
-        self.stack.setCurrentIndex(self.pg_login_idx)
+        self.stack.setCurrentWidget(self.pagina_login)
 
     def _autenticado(self, usuario):
         """Transiciona a la interfaz principal tras un login exitoso."""
@@ -139,12 +142,16 @@ class LabWindow(QMainWindow):
         self.auth_service._usuario_actual = usuario
         self.side.setVisible(True)
         self.btn_logout.setVisible(True)
-        self.stack.setCurrentIndex(self._seccion_widget["Resumen"])
+        self.stack.setCurrentWidget(self.paginas["Resumen"])
         self.ir("Resumen")
         # Forzar recálculo del layout para que el sidebar y el contenido se muestren
-        self.centralWidget().updateGeometry()
+        central = self.centralWidget()
+        central.layout().activate()
+        central.updateGeometry()
+        self.updateGeometry()
         self.update()
         self.repaint()
+        self.adjustSize()
 
     def cerrar_sesion(self):
         """Cierra la sesión y regresa a la pantalla de login en la misma ventana."""
@@ -153,15 +160,19 @@ class LabWindow(QMainWindow):
         self.current_experiment_id = None
         self.btn_logout.setVisible(False)
         self.side.setVisible(False)
-        self.stack.setCurrentIndex(self.pg_login_idx)
+        self.stack.setCurrentWidget(self.pagina_login)
         # Limpiar campos del login
         self.pagina_login.edit_user.clear()
         self.pagina_login.edit_pass.clear()
         self.pagina_login.lbl_error.setVisible(False)
         # Forzar recálculo del layout
-        self.centralWidget().updateGeometry()
+        central = self.centralWidget()
+        central.layout().activate()
+        central.updateGeometry()
+        self.updateGeometry()
         self.update()
         self.repaint()
+        self.adjustSize()
 
     # ---------- navegación ----------
 
