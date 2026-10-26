@@ -7,6 +7,8 @@ solo presentan. El motor de simulación sigue siendo exclusivamente PhysiCell.
 import os
 import sys
 import sqlite3
+import hashlib
+import secrets
 import traceback
 from datetime import datetime
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -245,10 +247,201 @@ def init_database():
     except Exception:
         pass
 
+    # --- Autenticación: tabla de usuarios ---
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'usuario',
+                activo INTEGER NOT NULL DEFAULT 1,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ultimo_acceso DATETIME
+            )
+        """)
+    except Exception:
+        pass
+
+    # Vincular experimentos a un usuario (propietario)
+    try:
+        cur.execute("ALTER TABLE experiments ADD COLUMN usuario_id INTEGER")
+    except Exception:
+        pass
+
+    # Si no existe ningún usuario, crear uno por defecto (admin) para compatibilidad
+    try:
+        cur.execute("SELECT COUNT(*) FROM usuarios")
+        if cur.fetchone()[0] == 0:
+            pwd_hash = _hash_password("admin123")
+            cur.execute(
+                "INSERT INTO usuarios (username, email, password_hash, rol, activo) "
+                "VALUES (?,?,?,?,1)",
+                ("admin", "admin@localhost", pwd_hash),
+            )
+            admin_id = cur.lastrowid
+            # Asignar experimentos existentes al admin por defecto
+            cur.execute(
+                "UPDATE experiments SET usuario_id=? WHERE usuario_id IS NULL",
+                (admin_id,),
+            )
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     print(f"DB inicializada: {db_path}")
     return db_path
+
+
+# ---------- Utilidades de contraseña ----------
+
+def _hash_password(password: str) -> str:
+    """Genera un hash seguro de la contraseña usando PBKDF2-HMAC-SHA256."""
+    salt = secrets.token_hex(16)
+    pwd_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        100_000,
+    )
+    return f"pbkdf2_sha256$100000${salt}${pwd_hash.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Verifica una contraseña contra su hash almacenado."""
+    try:
+        algorithm, iterations, salt, hash_value = stored_hash.split("$")
+        pwd_hash = hashlib.pbkdf2_hmac(
+            algorithm,
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
+            int(iterations),
+        )
+        return pwd_hash.hex() == hash_value
+    except Exception:
+        return False
+
+
+# ---------- Gestión de usuarios ----------
+
+def crear_usuario(conn, username, email, password, rol="usuario"):
+    """Crea un nuevo usuario. Retorna el id o None si ya existe."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id FROM usuarios WHERE username=? OR email=?",
+            (username, email),
+        )
+        if cur.fetchone():
+            return None
+        pwd_hash = _hash_password(password)
+        cur.execute(
+            "INSERT INTO usuarios (username, email, password_hash, rol, activo) "
+            "VALUES (?,?,?,?,1)",
+            (username, email, pwd_hash, rol),
+        )
+        conn.commit()
+        return cur.lastrowid
+    except Exception:
+        conn.rollback()
+        return None
+
+
+def autenticar_usuario(conn, username, password):
+    """Autentica un usuario. Retorna dict con datos del usuario o None."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, username, email, password_hash, rol, activo FROM usuarios WHERE username=?",
+            (username,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        uid, uname, email, pwd_hash, rol, activo = row
+        if not activo:
+            return None
+        if not _verify_password(password, pwd_hash):
+            return None
+        cur.execute(
+            "UPDATE usuarios SET ultimo_acceso=CURRENT_TIMESTAMP WHERE id=?",
+            (uid,),
+        )
+        conn.commit()
+        return {
+            "id": uid,
+            "username": uname,
+            "email": email,
+            "rol": rol,
+        }
+    except Exception:
+        return None
+
+
+def obtener_usuario_por_id(conn, uid):
+    """Retorna dict con datos del usuario o None."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, username, email, rol, activo FROM usuarios WHERE id=?",
+            (uid,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "username": row[1],
+            "email": row[2],
+            "rol": row[3],
+            "activo": bool(row[4]),
+        }
+    except Exception:
+        return None
+
+
+def listar_usuarios(conn):
+    """Lista todos los usuarios (sin hashes de contraseña)."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, username, email, rol, activo, creado_en FROM usuarios ORDER BY id"
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+
+
+def cambiar_rol_usuario(conn, uid, rol):
+    """Cambia el rol de un usuario."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE usuarios SET rol=? WHERE id=?",
+            (rol, uid),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+
+
+def desactivar_usuario(conn, uid):
+    """Desactiva un usuario (no se puede eliminar si tiene experimentos)."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE usuarios SET activo=0 WHERE id=?",
+            (uid,),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
 
 
 def registrar_video(conn, experiment_id, run_number, tipo="2d", ruta_archivo="", fps=1, frames=0):

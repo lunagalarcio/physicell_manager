@@ -74,10 +74,9 @@ class PaginaReportes(PaginaBase):
         self.table.cargar(filas)
 
     def _cargar_exps(self):
-        from .. import simulador as SIM
-        conn = self.conn()
-        filas = SIM.listar_experimentos(conn)
-        conn.close()
+        from .. import servicios as SERV
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
+        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
         self.exp_combo.clear()
         for eid, t in filas:
             self.exp_combo.addItem(f"#{eid} {t}", eid)

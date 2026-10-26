@@ -28,7 +28,8 @@ def test_crear_configuracion_copia_xml_inmutable(tmp_db_path):
     conn = sqlite3.connect(tmp_db_path)
     conn.executescript("""
         CREATE TABLE experiments (
-            id INTEGER PRIMARY KEY, title TEXT NOT NULL, config_xml_path TEXT
+            id INTEGER PRIMARY KEY, title TEXT NOT NULL, config_xml_path TEXT,
+            usuario_id INTEGER
         );
         CREATE TABLE configuraciones (
             id INTEGER PRIMARY KEY, experiment_id INTEGER NOT NULL,
@@ -38,7 +39,7 @@ def test_crear_configuracion_copia_xml_inmutable(tmp_db_path):
             FOREIGN KEY (experiment_id) REFERENCES experiments(id)
         );
     """)
-    conn.execute("INSERT INTO experiments (id, title, config_xml_path) VALUES (1, 'Exp', ?)", (CFG,))
+    conn.execute("INSERT INTO experiments (id, title, config_xml_path, usuario_id) VALUES (1, 'Exp', ?, 1)", (CFG,))
     conn.commit()
 
     # Copiar el XML a un archivo temporal que luego modificaremos
@@ -176,7 +177,7 @@ def test_crear_experimento_registra_configuracion_base(tmp_db_path):
             tags TEXT DEFAULT '', config_xml_path TEXT, binary_path TEXT,
             custom_cpp_path TEXT, custom_h_path TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_modified DATETIME
+            last_modified DATETIME, usuario_id INTEGER
         );
         CREATE TABLE configuraciones (
             id INTEGER PRIMARY KEY, experiment_id INTEGER NOT NULL,
@@ -211,7 +212,8 @@ def test_cambiar_configuracion_activa_no_modifica_runs_existentes(tmp_db_path):
     conn = sqlite3.connect(tmp_db_path)
     conn.executescript("""
         CREATE TABLE experiments (
-            id INTEGER PRIMARY KEY, title TEXT NOT NULL, config_xml_path TEXT
+            id INTEGER PRIMARY KEY, title TEXT NOT NULL, config_xml_path TEXT,
+            usuario_id INTEGER
         );
         CREATE TABLE configuraciones (
             id INTEGER PRIMARY KEY, experiment_id INTEGER NOT NULL,

@@ -14,6 +14,7 @@ from .base import (
     ExperimentoCard, estadisticas_experimento, estado_general_experimento,
 )
 from .. import simulador as SIM
+from .. import servicios as SERV
 from ..theme_lab import LIMA
 from ..xml_validator import validar_config
 
@@ -131,7 +132,7 @@ class PaginaResumen(PaginaBase):
             cfg = r[4] if len(r) > 4 else ""
             if cfg and os.path.isfile(cfg) and _validar_ok(cfg):
                 cfg_ok += 1
-        # Sumar estadísticas de runs desde las filas ya obtenidas
+        # Sumar estadï¿½sticas de runs desde las filas ya obtenidas
         comp = sum(r[10] or 0 for r in exps if len(r) > 10)
         curso = sum(r[11] or 0 for r in exps if len(r) > 11)
         fallo = sum(r[12] or 0 for r in exps if len(r) > 12)
@@ -145,11 +146,8 @@ class PaginaResumen(PaginaBase):
                 w.deleteLater()
 
         q = (self.search.text() or "").lower().strip()
-        q = (self.search.text() or "").lower().strip()
-        conn = self.conn()
-        filas = SIM.listar_experimentos_con_estadisticas(conn)[:12]
-        conn.close()
-        conn.close()
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
+        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)[:12]
 
         col = fila = 0
         mostrados = 0

@@ -122,16 +122,58 @@ def listar_runs(conn, experiment_id):
     return cur.fetchall()
 
 
-def crear_experimento(conn, title, description="", tags="", config_xml_path=""):
+def crear_experimento(conn, title, description="", tags="", config_xml_path="", usuario_id=None):
     """Crea un experimento y retorna su id."""
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO experiments (title, description, tags, config_xml_path, created_at, last_modified) "
-        "VALUES (?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
-        (title, description, tags, config_xml_path),
+        "INSERT INTO experiments (title, description, tags, config_xml_path, usuario_id, created_at, last_modified) "
+        "VALUES (?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+        (title, description, tags, config_xml_path, usuario_id),
     )
     conn.commit()
     return cur.lastrowid
+
+
+def listar_experimentos_por_usuario(conn, uid):
+    """Lista experimentos con estadísticas filtrados por usuario."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT e.id, e.title, e.description, e.tags, e.config_xml_path,
+                      e.binary_path, e.custom_cpp_path, e.custom_h_path, e.last_modified,
+                      COUNT(r.id) as total_runs,
+                      COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0),
+                      COALESCE(SUM(CASE WHEN r.status = 'running' THEN 1 ELSE 0 END), 0),
+                      COALESCE(SUM(CASE WHEN r.status IN ('failed', 'cancelled')
+                                       THEN 1 ELSE 0 END), 0),
+                      MAX(r.start_time)
+               FROM experiments e
+               LEFT JOIN runs r ON e.id = r.experiment_id
+               WHERE e.usuario_id = ?
+               GROUP BY e.id
+               ORDER BY e.id DESC""",
+            (uid,),
+        )
+        return cur.fetchall()
+    except Exception:
+        cur.execute(
+            "SELECT id, title, description, tags, config_xml_path, binary_path, "
+            "custom_cpp_path, custom_h_path, last_modified FROM experiments WHERE usuario_id=? ORDER BY id DESC",
+            (uid,),
+        )
+        filas = cur.fetchall()
+        return [f + (0, 0, 0, 0, None) for f in filas]
+
+
+def obtener_experimento_por_usuario(conn, eid, uid):
+    """Datos completos de un experimento solo si pertenece al usuario."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, title, description, tags, config_xml_path, binary_path, "
+        "custom_cpp_path, custom_h_path, created_at, last_modified, usuario_id "
+        "FROM experiments WHERE id=? AND usuario_id=?", (eid, uid)
+    )
+    return cur.fetchone()
 
 
 def actualizar_experimento(conn, experiment_id, title, description, tags, binary_path="", custom_cpp_path="", custom_h_path=""):

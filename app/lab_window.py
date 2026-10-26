@@ -3,6 +3,10 @@
 
 Contenedor ligero: delega cada página a un módulo en app/paginas/.
 No modifica el motor PhysiCell; solo genera XML, lanza el binario y organiza salidas.
+
+Incluye autenticación local integrada en la misma ventana principal:
+si no hay sesión activa, se muestra la pantalla de login dentro del
+mismo QStackedWidget (sin segunda ventana).
 """
 import sys
 
@@ -11,9 +15,10 @@ from PyQt6.QtWidgets import (
     QButtonGroup, QStackedWidget
 )
 from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
 
 from .theme_lab import LAB_QSS
-from .nucleo import init_database
+from .nucleo import init_database, get_db_path
 from .paginas.base import PaginaBase
 from .paginas.resumen import PaginaResumen
 from .paginas.experimentos import PaginaExperimentos
@@ -24,6 +29,8 @@ from .paginas.comparacion_global import PaginaComparacion
 from .paginas.reportes import PaginaReportes
 from .paginas.preferencias import PaginaPreferencias
 from .paginas.detalle import PaginaDetalle
+from .paginas.login import PaginaLogin
+from . import servicios as SERV
 
 
 class LabWindow(QMainWindow):
@@ -35,6 +42,8 @@ class LabWindow(QMainWindow):
         self.current_experiment_id = None
         self.worker = None
         self._last_exe = ""
+        self.usuario_actual = None
+        self.auth_service = SERV.AuthService(get_db_path())
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -42,11 +51,11 @@ class LabWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ---- sidebar ----
-        side = QWidget()
-        side.setObjectName("SideBar")
-        side.setFixedWidth(212)
-        sl = QVBoxLayout(side)
+        # ---- sidebar (oculto hasta autenticarse) ----
+        self.side = QWidget()
+        self.side.setObjectName("SideBar")
+        self.side.setFixedWidth(212)
+        sl = QVBoxLayout(self.side)
         sl.setContentsMargins(14, 18, 14, 18)
         sl.setSpacing(6)
         brand = QLabel("PhysiCell Lab")
@@ -72,8 +81,17 @@ class LabWindow(QMainWindow):
             self.nav_group.addButton(b, i)
             sl.addWidget(b)
             self.nav_btns[name] = b
+
+        # Botón de cierre de sesión en el sidebar
         sl.addStretch()
-        root.addWidget(side)
+        self.btn_logout = QPushButton("Cerrar sesión")
+        self.btn_logout.setObjectName("Secondary")
+        self.btn_logout.setFixedHeight(32)
+        self.btn_logout.clicked.connect(self.cerrar_sesion)
+        sl.addWidget(self.btn_logout)
+        self.btn_logout.setVisible(False)
+
+        root.addWidget(self.side)
         root.addWidget(self.stack, 1)
 
         # ---- páginas ----
@@ -99,11 +117,49 @@ class LabWindow(QMainWindow):
         self.pagina_detalle = PaginaDetalle(self)
         self.pg_detalle_idx = self.stack.addWidget(self.pagina_detalle)
 
+        # ---- página de login integrada en el mismo stack ----
+        self.pagina_login = PaginaLogin(self)
+        self.pg_login_idx = self.stack.addWidget(self.pagina_login)
+
         init_database()
+        # Siempre inicia mostrando el login (no hay sesión persistente al cerrar y abrir)
+        self._mostrar_login()
+
+    # ---------- autenticación ----------
+
+    def _mostrar_login(self):
+        """Muestra la pantalla de login en la misma ventana, ocultando el sidebar."""
+        self.usuario_actual = None
+        self.side.setVisible(False)
+        self.stack.setCurrentIndex(self.pg_login_idx)
+
+    def _autenticado(self, usuario):
+        """Transiciona a la interfaz principal tras un login exitoso."""
+        self.usuario_actual = usuario
+        self.auth_service._usuario_actual = usuario
+        self.side.setVisible(True)
+        self.btn_logout.setVisible(True)
+        self.stack.setCurrentIndex(self._seccion_widget["Resumen"])
         self.ir("Resumen")
 
+    def cerrar_sesion(self):
+        """Cierra la sesión y regresa a la pantalla de login en la misma ventana."""
+        self.auth_service.logout()
+        self.usuario_actual = None
+        self.current_experiment_id = None
+        self.btn_logout.setVisible(False)
+        self.side.setVisible(False)
+        self.stack.setCurrentIndex(self.pg_login_idx)
+        # Limpiar campos del login
+        self.pagina_login.edit_user.clear()
+        self.pagina_login.edit_pass.clear()
+        self.pagina_login.lbl_error.setVisible(False)
+
     # ---------- navegación ----------
+
     def ir(self, name):
+        if name not in self._secciones:
+            return
         idx = {n: i for i, n in enumerate(self._secciones)}[name]
         self.nav_btns[name].setChecked(True)
         pagina = self.paginas.get(name)

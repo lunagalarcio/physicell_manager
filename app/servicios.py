@@ -236,12 +236,72 @@ def iniciar_ejecucion(db_path, experiment_id, xml_path, n_replicas, exe_path,
     return worker
 
 
+# ---------- Autenticación ----------
+
+class AuthService:
+    """Servicio de autenticación local para PhysiCell Lab.
+
+    Gestiona login, logout, registro y el usuario activo en sesión.
+    No crea ventanas propias; la UI decide cómo mostrar cada estado.
+    """
+
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self._usuario_actual = None
+
+    @property
+    def usuario_actual(self):
+        """Retorna dict con datos del usuario logueado o None."""
+        return self._usuario_actual
+
+    def login(self, username, password):
+        """Intenta autenticar al usuario. Retorna dict con {ok, usuario} o {ok=False, error}."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            usuario = NUC.autenticar_usuario(conn, username, password)
+            if usuario:
+                self._usuario_actual = usuario
+                return {"ok": True, "usuario": usuario}
+            return {"ok": False, "error": "Usuario o contraseña incorrectos"}
+        finally:
+            conn.close()
+
+    def logout(self):
+        """Cierra la sesión del usuario actual."""
+        self._usuario_actual = None
+        return {"ok": True}
+
+    def registrar(self, username, email, password, rol="usuario"):
+        """Registra un nuevo usuario. Retorna dict con {ok} o {ok=False, error}."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            uid = NUC.crear_usuario(conn, username, email, password, rol)
+            if uid is None:
+                return {"ok": False, "error": "El usuario o correo ya existen"}
+            return {"ok": True, "usuario_id": uid}
+        finally:
+            conn.close()
+
+    def esta_autenticado(self):
+        """Retorna True si hay un usuario logueado."""
+        return self._usuario_actual is not None
+
+    def obtener_usuario(self):
+        """Retorna el usuario actual o None."""
+        return self._usuario_actual
+
+
 # ---------- Consultas de lectura ----------
 
-def listar_experimentos_servicio(db_path):
-    """Lista experimentos con estadísticas (para la página Experimentos y Resumen)."""
+def listar_experimentos_servicio(db_path, usuario_id=None):
+    """Lista experimentos con estadísticas (para la página Experimentos y Resumen).
+
+    Si se indica usuario_id, filtra solo los experimentos de ese usuario.
+    """
     conn = sqlite3.connect(db_path)
     try:
+        if usuario_id is not None:
+            return SIM.listar_experimentos_por_usuario(conn, usuario_id)
         return SIM.listar_experimentos_con_estadisticas(conn)
     finally:
         conn.close()

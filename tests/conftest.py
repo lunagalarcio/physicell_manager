@@ -33,7 +33,18 @@ CREATE TABLE IF NOT EXISTS experiments (
     custom_h_path TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_modified DATETIME,
-    tags TEXT DEFAULT ''
+    tags TEXT DEFAULT '',
+    usuario_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'usuario',
+    activo INTEGER NOT NULL DEFAULT 1,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ultimo_acceso DATETIME
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,

@@ -10,6 +10,7 @@ from .base import (
     ExperimentoCard, estadisticas_experimento, estado_general_experimento,
 )
 from .. import simulador as SIM
+from .. import servicios as SERV
 from ..theme_lab import LIMA
 
 
@@ -55,9 +56,8 @@ class PaginaExperimentos(PaginaBase):
                 w.deleteLater()
 
         q = (self.search.text() or "").lower().strip()
-        conn = self.conn()
-        filas = SIM.listar_experimentos_con_estadisticas(conn)
-        conn.close()
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
+        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
 
         col = fila = 0
         for r in filas:
@@ -124,8 +124,9 @@ class PaginaExperimentos(PaginaBase):
 
     def _editar_meta(self, eid):
         from PyQt6.QtWidgets import QLineEdit
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
         conn = self.conn()
-        row = SIM.obtener_experimento(conn, eid)
+        row = SIM.obtener_experimento_por_usuario(conn, eid, uid) if uid else None
         conn.close()
         t, d, g, bp, cpp, h = (row[1], row[2], row[3] or "", row[5] or "", row[6] or "", row[7] or "") if row else ("", "", "", "", "", "")
 
@@ -166,6 +167,9 @@ class PaginaExperimentos(PaginaBase):
             self.lw.refrescar_resumen()
 
     def _eliminar_exp(self, eid):
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
+        if not uid:
+            return
         r = QMessageBox.question(
             self.lw, "Eliminar",
             "Borra experimento, runs y escenarios. ¿Continuar?",
@@ -174,6 +178,11 @@ class PaginaExperimentos(PaginaBase):
         if r != QMessageBox.StandardButton.Yes:
             return
         conn = self.conn()
+        # Solo eliminar si pertenece al usuario
+        row = SIM.obtener_experimento_por_usuario(conn, eid, uid)
+        if not row:
+            conn.close()
+            return
         SIM.eliminar_experimento(conn, eid)
         conn.close()
         if self.lw.current_experiment_id == eid:
@@ -215,6 +224,7 @@ class PaginaExperimentos(PaginaBase):
         if not dlg.exec():
             return
 
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
         conn = self.conn()
         nid = SIM.crear_experimento(
             conn,
@@ -222,6 +232,7 @@ class PaginaExperimentos(PaginaBase):
             t2.text().strip(),
             t3.text().strip(),
             "",
+            usuario_id=uid,
         )
         conn.close()
         self.refrescar()

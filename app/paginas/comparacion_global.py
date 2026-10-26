@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QVBoxLayout, QPushButton, QComboBox, QCheckBox, QWid
 from .base import (
     PaginaBase, Seccion, Tarjeta, ESPACIO_M,
 )
+from .. import simulador as SIM
 
 
 class PaginaComparacion(PaginaBase):
@@ -53,10 +54,9 @@ class PaginaComparacion(PaginaBase):
         self._cargar_exps()
 
     def _cargar_exps(self):
-        from .. import simulador as SIM
-        conn = self.conn()
-        filas = SIM.listar_experimentos(conn)
-        conn.close()
+        from .. import servicios as SERV
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
+        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
         self.exp_combo.clear()
         for eid, title in filas:
             self.exp_combo.addItem(f"#{eid} {title}", eid)
@@ -76,11 +76,11 @@ class PaginaComparacion(PaginaBase):
             w = item.widget()
             if w:
                 w.deleteLater()
+        uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
         conn = self.conn()
-        cur = conn.cursor()
         for eid in self.seleccionados:
             try:
-                row = SIM.obtener_experimento(conn, eid)
+                row = SIM.obtener_experimento_por_usuario(conn, eid, uid) if uid else None
                 title = row[1] if row else f"Experimento {eid}"
             except Exception:
                 title = f"Experimento {eid}"
