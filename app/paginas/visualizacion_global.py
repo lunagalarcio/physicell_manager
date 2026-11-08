@@ -84,7 +84,8 @@ class PaginaVisualizacion(PaginaBase):
         rows = SIM.listar_runs(conn, eid)
         conn.close()
         outs = []
-        for _id, rnum, st, _s, _e, od in rows:
+        for fila in rows:
+            _id, rnum, st, _s, _e, od = fila[:6]
             if od and os.path.isdir(od):
                 for d in (os.path.join(od, "output"), od):
                     if _g.glob(os.path.join(d, "snapshot*.svg")) or _g.glob(os.path.join(d, "*_cells.mat")):

@@ -8,13 +8,14 @@ Incluye autenticación local integrada en la misma ventana principal:
 si no hay sesión activa, se muestra la pantalla de login dentro del
 mismo QStackedWidget (sin segunda ventana ni diálogo independiente).
 """
+import os
 import sys
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QButtonGroup, QStackedWidget, QSizePolicy
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtCore import Qt
 
 from .theme_lab import LAB_QSS
@@ -36,7 +37,8 @@ from . import servicios as SERV
 class LabWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PhysiCell Lab")
+        self.setWindowTitle("PhysiCell Manager")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "assets", "physicell_lab.png")))
         self.setMinimumSize(1200, 800)
         self.setStyleSheet(LAB_QSS)
         self.current_experiment_id = None
@@ -81,7 +83,7 @@ class LabWindow(QMainWindow):
         sl = QVBoxLayout(self.side)
         sl.setContentsMargins(14, 18, 14, 18)
         sl.setSpacing(6)
-        brand = QLabel("PhysiCell Lab")
+        brand = QLabel("PhysiCell Manager")
         brand.setObjectName("Brand")
         sl.addWidget(brand)
         sub = QLabel("Simulación celular")

@@ -12,8 +12,62 @@ import secrets
 import traceback
 from datetime import datetime
 from PyQt6.QtCore import QThread, pyqtSignal
-from .simulador import generar_replica_config, registrar_run, actualizar_run
-from .motor_physicell import MotorPhysiCell
+from .simulador import (
+    generar_replica_config, registrar_run, actualizar_run,
+    crear_batch, actualizar_batch,
+)
+from .motor_physicell import MotorPhysiCell, explicar_codigo_salida, verificar_binario
+
+
+def _primera_linea(texto):
+    """Primera linea con contenido, para resumir un motivo de fallo en una fila."""
+    for ln in (texto or "").splitlines():
+        if ln.strip():
+            return ln.strip()[:200]
+    return "sin detalle"
+
+
+def _resumen_fallo(stdout, code=None):
+    """Construye un motivo legible cuando el motor falla sin mensaje explicito."""
+    lineas = [ln.strip() for ln in (stdout or "").splitlines() if ln.strip()]
+    hexa = f" (0x{(int(code) & 0xFFFFFFFF):08X})" if code is not None else ""
+    pista = explicar_codigo_salida(code) if code is not None else ""
+    cabecera = f"PhysiCell terminó con código {code}{hexa}."
+    if pista:
+        cabecera += f"\n{pista}"
+    if lineas:
+        return f"{cabecera}\nÚltimas líneas de salida:\n" + "\n".join(lineas[-12:])
+    return (f"{cabecera}\nSin salida del motor. Revisa que el ejecutable corresponda "
+            "a tu modelo y que el XML sea compatible.")
+
+
+def _contar_salidas(output_dir):
+    """Cuenta snapshots, XML y .mat generados por PhysiCell.
+
+    Mira tanto la carpeta de salida configurada como la raíz de la réplica,
+    porque algunas versiones de PhysiCell guardan en la carpeta de trabajo.
+    """
+    import glob as _glob
+    dirs = [output_dir, os.path.dirname(output_dir)] if output_dir else []
+    n_svg = n_xml = n_mat = 0
+    for d in dirs:
+        if not d or not os.path.isdir(d):
+            continue
+        n_svg += len(_glob.glob(os.path.join(d, "snapshot*.svg")))
+        n_xml += len(_glob.glob(os.path.join(d, "output*.xml")))
+        n_mat += len(_glob.glob(os.path.join(d, "output*_cells.mat")))
+    return n_svg, n_xml, n_mat
+
+
+def _escribir_log_extra(log_path, texto):
+    """Añade una nota al registro de la ejecución (sin fallar si no se puede)."""
+    if not log_path:
+        return
+    try:
+        with open(log_path, "a", encoding="utf-8", errors="replace") as f:
+            f.write("\n" + str(texto) + "\n")
+    except Exception:
+        pass
 
 
 class ReplicaWorker(QThread):
@@ -22,7 +76,7 @@ class ReplicaWorker(QThread):
     fail = pyqtSignal(str)
 
     def __init__(self, experiment_id, base_xml, n_replicas, exe_path="", db_path="",
-                 configuracion_id=None):
+                 configuracion_id=None, escenario_id=None, timeout_min=0, inactividad_min=10):
         super().__init__()
         self.experiment_id = experiment_id
         self.base_xml = base_xml
@@ -30,6 +84,9 @@ class ReplicaWorker(QThread):
         self.exe_path = exe_path
         self.db_path = db_path
         self.configuracion_id = configuracion_id
+        self.escenario_id = escenario_id
+        self.timeout_min = timeout_min
+        self.inactividad_min = inactividad_min
         self._stop = False
 
     def stop(self):
@@ -49,54 +106,181 @@ class ReplicaWorker(QThread):
                 max_t = float(ET.parse(self.base_xml).getroot().find(".//max_time").text)
             except Exception:
                 max_t = None
+            fallos = []
+            simuladas = 0
+            # --- Lote: agrupa estas réplicas y guarda la huella de XML/motor ---
+            try:
+                batch_id = crear_batch(
+                    conn, self.experiment_id, self.base_xml, self.exe_path,
+                    self.n_replicas, seed_base=1001,
+                    timeout_min=self.timeout_min,
+                    inactividad_min=self.inactividad_min,
+                )
+            except Exception:
+                batch_id = None
+            timeout_ms = int(self.timeout_min * 60000) if self.timeout_min else None
+            inactividad_s = max(60, int((self.inactividad_min or 10) * 60))
             for i in range(1, self.n_replicas + 1):
                 if self._stop:
+                    actualizar_batch(conn, batch_id, "cancelled", "Cancelado por el usuario")
                     self.fail.emit("Cancelado por usuario")
                     return
                 rep_dir = os.path.join(base_dir, f"replica_{i}")
                 os.makedirs(rep_dir, exist_ok=True)
                 out_xml = os.path.join(rep_dir, f"replica_{i}.xml")
+                run_id = None
+                log_path = ""
                 try:
                     generar_replica_config(self.base_xml, out_xml, seed=1000 + i,
                                            output_folder=os.path.join(rep_dir, "output"))
                     run_id = registrar_run(conn, self.experiment_id, i, status="running",
-                                           output_dir=rep_dir, configuracion_id=self.configuracion_id)
-                    if self.exe_path and os.path.isfile(self.exe_path):
-                        base_pct = int((i - 1) * 100 / self.n_replicas)
-                        paso = 100 / self.n_replicas
-                        def _cb(sim_t, _ln, _b=base_pct, _p=paso):
-                            if max_t:
-                                pct = _b + min(1.0, sim_t / max_t) * _p
-                                self.prog.emit(int(pct), f"Replica {i}/{self.n_replicas} t={sim_t:.0f}/{max_t:.0f} min")
-                        r = motor.ejecutar_cancelable(self.exe_path, out_xml, cwd=os.path.dirname(self.exe_path),
-                                                      timeout_ms=600000, stop_flag=lambda: self._stop, linea_cb=_cb)
-                        if r.get("cancelled"):
-                            actualizar_run(conn, run_id, "cancelled", end=True,
-                                           configuracion_id=self.configuracion_id)
-                            conn.close()
-                            self.fail.emit("Cancelado por usuario")
-                            return
-                        actualizar_run(conn, run_id, "completed" if r.get("ok") else "failed", end=True,
-                                       configuracion_id=self.configuracion_id)
-                    else:
-                        # Sin binario PhysiCell no hay simulacion: solo config generada
+                                           output_dir=rep_dir, configuracion_id=self.configuracion_id,
+                                           escenario_id=self.escenario_id, batch_id=batch_id)
+                    # Registro completo del motor desde el primer momento
+                    log_path = os.path.join(rep_dir, f"physicell_run_{run_id}.log")
+                    actualizar_run(conn, run_id, "running", log_path=log_path)
+
+                    # --- Verificación previa: ¿existe el proceso/ejecutable? ---
+                    if not self.exe_path:
+                        motivo = (
+                            "No hay binario de PhysiCell configurado para este experimento: "
+                            "solo se generó la configuración.\n"
+                            "Asigna el ejecutable en la pestaña Configuración para poder simular."
+                        )
+                        _escribir_log_extra(log_path, motivo)
                         actualizar_run(conn, run_id, "registered", end=True,
-                                       configuracion_id=self.configuracion_id)
+                                       configuracion_id=self.configuracion_id,
+                                       error_message=motivo)
+                        self.prog.emit(int(i * 100 / self.n_replicas),
+                                       f"Replica {i}/{self.n_replicas} registrada (sin binario)")
+                        continue
+
+                    problemas = verificar_binario(self.exe_path)
+                    if problemas:
+                        motivo = (
+                            "No se puede ejecutar PhysiCell: " + problemas[0]
+                            + ("" if len(problemas) == 1 else "\n- " + "\n- ".join(problemas[1:]))
+                            + f"\nRuta configurada: {self.exe_path}"
+                        )
+                        _escribir_log_extra(log_path, motivo)
+                        fallos.append(f"Réplica {i}: {_primera_linea(motivo)}")
+                        actualizar_run(conn, run_id, "failed", end=True,
+                                       configuracion_id=self.configuracion_id,
+                                       error_message=motivo)
+                        self.prog.emit(int(i * 100 / self.n_replicas),
+                                       f"Replica {i}/{self.n_replicas} FALLO: {_primera_linea(motivo)}")
+                        continue
+
+                    base_pct = int((i - 1) * 100 / self.n_replicas)
+                    paso = 100 / self.n_replicas
+                    def _cb(sim_t, _ln, _b=base_pct, _p=paso):
+                        if max_t:
+                            pct = _b + min(1.0, sim_t / max_t) * _p
+                            self.prog.emit(int(pct), f"Replica {i}/{self.n_replicas} t={sim_t:.0f}/{max_t:.0f} min")
+
+                    def _inicio(pid, _i=i, _b=base_pct):
+                        self.prog.emit(int(_b),
+                                       f"Replica {_i}/{self.n_replicas}: PhysiCell iniciado (PID {pid})")
+
+                    r = motor.ejecutar_cancelable(self.exe_path, out_xml, cwd=os.path.dirname(self.exe_path),
+                                                  timeout_ms=timeout_ms, stop_flag=lambda: self._stop,
+                                                  linea_cb=_cb, log_path=log_path,
+                                                  inicio_cb=_inicio,
+                                                  inactividad_s=inactividad_s)
+                    # Guardar el PID real del proceso lanzado
+                    if r.get("pid"):
+                        actualizar_run(conn, run_id, "running", pid=r.get("pid"))
+
+                    if r.get("cancelled"):
+                        actualizar_run(conn, run_id, "cancelled", end=True,
+                                       configuracion_id=self.configuracion_id,
+                                       error_message="Cancelado por el usuario")
+                        actualizar_batch(conn, batch_id, "cancelled", "Cancelado por el usuario")
+                        conn.close()
+                        self.fail.emit("Cancelado por usuario")
+                        return
+                    if r.get("ok"):
+                        # El proceso terminó bien: comprobar que PhysiCell escribió resultados
+                        salida_dir = os.path.join(rep_dir, "output")
+                        n_svg, n_xml, n_mat = _contar_salidas(salida_dir)
+                        if n_svg + n_xml + n_mat == 0:
+                            motivo = (
+                                "PhysiCell terminó con código 0 pero no generó archivos de salida "
+                                f"(PID {r.get('pid') or 'desconocido'}).\n"
+                                f"Carpeta revisada: {salida_dir}\n"
+                                "El proceso arrancó, pero no guardó snapshots, XML ni .mat. "
+                                "Revisa en el XML las opciones de guardado (save_svg, save_xml, "
+                                "save_cells_mat) y las carpetas de salida."
+                            )
+                            _escribir_log_extra(log_path, motivo)
+                            fallos.append(f"Réplica {i}: no generó archivos de salida")
+                            actualizar_run(conn, run_id, "failed", end=True,
+                                           configuracion_id=self.configuracion_id,
+                                           error_message=motivo)
+                            self.prog.emit(int(i * 100 / self.n_replicas),
+                                           f"Replica {i}/{self.n_replicas} FALLO: sin archivos de salida")
+                        else:
+                            actualizar_run(conn, run_id, "completed", end=True,
+                                           configuracion_id=self.configuracion_id)
+                            simuladas += 1
+                            self.prog.emit(
+                                int(i * 100 / self.n_replicas),
+                                f"Replica {i}/{self.n_replicas} lista: "
+                                f"{n_svg} snapshots, {n_xml} XML, {n_mat} .mat",
+                            )
+                    else:
+                        motivo = r.get("error") or _resumen_fallo(r.get("stdout", ""), r.get("code"))
+                        if r.get("log_path"):
+                            motivo += f"\nRegistro completo: {r['log_path']}"
+                        fallos.append(f"Réplica {i}: {motivo}")
+                        actualizar_run(conn, run_id, "failed", end=True,
+                                       configuracion_id=self.configuracion_id,
+                                       error_message=motivo)
+                        self.prog.emit(int(i * 100 / self.n_replicas),
+                                       f"Replica {i}/{self.n_replicas} FALLO: {_primera_linea(motivo)}")
                 except Exception as e:
                     tb = traceback.format_exc()
+                    motivo = f"{e}\n{tb[-1000:]}"
+                    _escribir_log_extra(log_path, "Excepción de la app:\n" + tb)
+                    fallos.append(f"Réplica {i}: {e}")
                     try:
-                        if 'run_id' in locals():
+                        if run_id is not None:
                             actualizar_run(conn, run_id, "failed", end=True,
-                                           configuracion_id=self.configuracion_id)
+                                           configuracion_id=self.configuracion_id,
+                                           error_message=motivo)
                     except Exception:
                         pass
-                    self.fail.emit(f"Réplica {i} falló: {e}\n{tb[-1000:]}")
+                    self.fail.emit(f"Réplica {i} falló: {motivo}")
+                    try:
+                        actualizar_batch(conn, batch_id, "failed", motivo)
+                    except Exception:
+                        pass
                     return
-                self.prog.emit(int(i * 100 / self.n_replicas), f"Replica {i}/{self.n_replicas} lista (PhysiCell)")
+            if not fallos and simuladas == 0:
+                estado_lote = "registered"
+            elif not fallos:
+                estado_lote = "completed"
+            elif len(fallos) >= self.n_replicas:
+                estado_lote = "failed"
+            else:
+                estado_lote = "partial"
+            actualizar_batch(conn, batch_id, estado_lote,
+                             "\n".join(fallos)[:4000] if fallos else None)
             conn.close()
-            self.done.emit({"experiment_id": self.experiment_id, "replicas": self.n_replicas})
+            self.done.emit({
+                "experiment_id": self.experiment_id,
+                "replicas": self.n_replicas,
+                "batch_id": batch_id,
+                "fallos": fallos,
+            })
         except Exception as e:
             tb = traceback.format_exc()
+            try:
+                if "conn" in locals():
+                    actualizar_batch(conn, locals().get("batch_id"), "failed",
+                                     f"{e}\n{tb[-1000:]}")
+            except Exception:
+                pass
             try:
                 self.fail.emit(f"{e}\n\n{tb}")
             except Exception:
@@ -151,6 +335,10 @@ def init_database():
             start_time DATETIME,
             end_time DATETIME,
             output_dir TEXT,
+            error_message TEXT,
+            log_path TEXT,
+            pid INTEGER,
+            batch_id INTEGER,
             FOREIGN KEY (experiment_id) REFERENCES experiments(id)
         )
     """)
@@ -228,6 +416,52 @@ def init_database():
     # Vincular cada ejecución a la configuración exacta que usó
     try:
         cur.execute("ALTER TABLE runs ADD COLUMN configuracion_id INTEGER")
+    except Exception:
+        pass
+
+    # Motivo del fallo de una ejecución (explicar el porqué, no solo "failed")
+    try:
+        cur.execute("ALTER TABLE runs ADD COLUMN error_message TEXT")
+    except Exception:
+        pass
+
+    # Registro completo de PhysiCell (stdout+stderr) y PID del proceso lanzado
+    try:
+        cur.execute("ALTER TABLE runs ADD COLUMN log_path TEXT")
+    except Exception:
+        pass
+    try:
+        cur.execute("ALTER TABLE runs ADD COLUMN pid INTEGER")
+    except Exception:
+        pass
+
+    # Lote de ejecución: agrupa las réplicas lanzadas juntas y guarda su huella
+    try:
+        cur.execute("ALTER TABLE runs ADD COLUMN batch_id INTEGER")
+    except Exception:
+        pass
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS batches (
+                id INTEGER PRIMARY KEY,
+                experiment_id INTEGER,
+                creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+                n_replicas INTEGER,
+                xml_path TEXT,
+                xml_sha256 TEXT,
+                exe_path TEXT,
+                exe_sha256 TEXT,
+                seed_base INTEGER,
+                timeout_min INTEGER DEFAULT 0,
+                inactividad_min INTEGER DEFAULT 10,
+                python_version TEXT,
+                plataforma TEXT,
+                notas TEXT,
+                status TEXT DEFAULT 'running',
+                error_message TEXT,
+                FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+            )
+        """)
     except Exception:
         pass
 

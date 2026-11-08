@@ -323,6 +323,15 @@ def listar_runs_servicio(db_path, experiment_id):
         conn.close()
 
 
+def ultimas_tandas_servicio(db_path):
+    """Estados de la última tanda de réplicas de cada experimento."""
+    conn = sqlite3.connect(db_path)
+    try:
+        return SIM.estados_ultima_tanda(conn)
+    finally:
+        conn.close()
+
+
 def listar_configuraciones_servicio(db_path, experiment_id):
     conn = sqlite3.connect(db_path)
     try:

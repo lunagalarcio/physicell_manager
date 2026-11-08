@@ -29,6 +29,5 @@ jobs:
           pip install pytest
 
       - name: Run test suite
-        # Desactivado temporalmente por solicitud del usuario.
-        # run: |
-        #   python -m pytest tests/ -v
+        run: |
+          python -m pytest tests/ -v

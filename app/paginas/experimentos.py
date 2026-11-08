@@ -58,6 +58,10 @@ class PaginaExperimentos(PaginaBase):
         q = (self.search.text() or "").lower().strip()
         uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
         filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
+        try:
+            tandas = SERV.ultimas_tandas_servicio(self.db_path())
+        except Exception:
+            tandas = {}
 
         col = fila = 0
         for r in filas:
@@ -90,7 +94,8 @@ class PaginaExperimentos(PaginaBase):
             n_running = en_curso
             xml_ok = xe_label == "Válido"
             estado_general, estado_clave = estado_general_experimento(
-                total_runs, n_running, n_failed, n_completed, xml_ok
+                total_runs, n_running, n_failed, n_completed, xml_ok,
+                tandas.get(eid) if isinstance(tandas, dict) else None,
             )
 
             card = ExperimentoCard(

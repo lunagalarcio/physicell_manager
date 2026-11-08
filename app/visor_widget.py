@@ -42,6 +42,33 @@ def leer_bounds(output_dir):
         return None
 
 
+def leer_z_frame(output_dir, frame_idx):
+    """Lee la coordenada Z por celula desde cells.mat del frame (campo position: filas x,y,z)."""
+    import numpy as _np
+    import scipy.io as _sio
+    if not output_dir or not os.path.isdir(output_dir):
+        return None
+    mats = sorted(glob.glob(os.path.join(output_dir, "output*_cells.mat")))
+    if not mats:
+        return None
+    snaps = listar_snapshots(output_dir)
+    if not snaps:
+        return None
+    mi = frame_idx
+    if len(mats) != len(snaps):
+        mi = round(frame_idx * (len(mats) - 1) / max(1, len(snaps) - 1))
+    mi = max(0, min(len(mats) - 1, int(mi)))
+    try:
+        m = _sio.loadmat(mats[mi])["cells"]
+        if m.ndim != 2 or m.shape[0] < 4:
+            return None
+        # layout: campo ID=0, position=1(size 3: x,y,z), ... => z esta en la fila 1+2=3
+        z = np.asarray(m[3], float)
+        return z
+    except Exception:
+        return None
+
+
 def parse_snapshot_svg(path, bounds, show_nucleus=False):
     """Replica Studio plot_svg. Retorna dict con x,y,r,rgba,time,num."""
     tree = ET.parse(path)
@@ -296,10 +323,10 @@ class VisorPhysiCell(QWidget):
         lay.addWidget(self.lbl_leyenda)
         # ---- pestañas 2D y 3D separadas ----
         self.tabs_vis = QTabWidget()
-        self.fig2 = Figure(figsize=(6, 3.8))
+        self.fig2 = Figure(figsize=(8, 5))
         self.ax2 = self.fig2.add_subplot(111)
         self.canvas2 = FigureCanvasQTAgg(self.fig2)
-        self.fig3 = Figure(figsize=(6, 3.8))
+        self.fig3 = Figure(figsize=(8, 5))
         self.ax3 = self.fig3.add_subplot(111, projection="3d")
         self.canvas3 = FigureCanvasQTAgg(self.fig3)
         self.tabs_vis.addTab(self.canvas2, "2D")
@@ -420,6 +447,12 @@ class VisorPhysiCell(QWidget):
         if not r.get("ok"):
             return {"ok": False, "error": r.get("error"), "idx": idx}
         x, y, rv, rgba = r["x"], r["y"], r["r"], r["rgba"]
+        zt = leer_z_frame(self.dir_edit.text().strip(), idx)
+        z = np.asarray(zt, dtype=float) if zt is not None else np.zeros_like(x, dtype=float)
+        if len(z) < len(x):
+            z = np.zeros_like(x, dtype=float)
+        else:
+            z = z[:len(x)]
         tipos = list(r.get("types", []))
         filtro = self.cmb_tipo.currentText() if hasattr(self, "cmb_tipo") else "Todos"
         if filtro and filtro != "Todos" and len(tipos) == len(x):
@@ -429,6 +462,7 @@ class VisorPhysiCell(QWidget):
             mask = np.ones(len(x), dtype=bool)
             idx_map = {i: i for i in range(len(x))}
         x, y, rv = x[mask], y[mask], rv[mask]
+        z = z[mask]
         rgba = rgba[mask] if len(rgba) == len(mask) else rgba
         vec0 = leer_grafo(self.dir_edit.text().strip(), idx, "neighbor") if self.chk_vec.isChecked() else set()
         att0 = leer_grafo(self.dir_edit.text().strip(), idx, "attached") if self.chk_att.isChecked() else set()
@@ -439,7 +473,7 @@ class VisorPhysiCell(QWidget):
                 if i in idx_map and j in idx_map:
                     out.add((idx_map[i], idx_map[j]))
             return out
-        return {"ok": True, "idx": idx, "x": x, "y": y, "rv": rv, "rgba": rgba,
+        return {"ok": True, "idx": idx, "x": x, "y": y, "z": z, "rv": rv, "rgba": rgba,
                 "tipos": tipos, "time": r["time"], "n": r["n"],
                 "vec": _filt(vec0), "att": _filt(att0), "spr": _filt(spr0)}
 
@@ -506,13 +540,16 @@ class VisorPhysiCell(QWidget):
         # 3D con mismos colores y tamaño por radio + enlaces de interacción
         if len(x):
             import numpy as _np
-            z = _np.zeros_like(x, dtype=float)
+            zt = d.get("z")
+            z = np.asarray(zt, dtype=float) if zt is not None else np.zeros_like(x, dtype=float)
+            if len(z) != len(x):
+                z = np.zeros_like(x, dtype=float)
             for i, j in vec:
                 if 0 <= i < len(x) and 0 <= j < len(x):
-                    self.ax3.plot([x[i], x[j]], [y[i], y[j]], [0, 0], color="gray", linewidth=0.8, alpha=0.7)
+                    self.ax3.plot([x[i], x[j]], [y[i], y[j]], [z[i], z[j]], color="gray", linewidth=0.8, alpha=0.7)
             for i, j in att | spr:
                 if 0 <= i < len(x) and 0 <= j < len(x):
-                    self.ax3.plot([x[i], x[j]], [y[i], y[j]], [0, 0], color="red", linewidth=1.0, alpha=0.9)
+                    self.ax3.plot([x[i], x[j]], [y[i], y[j]], [z[i], z[j]], color="red", linewidth=1.0, alpha=0.9)
             self.ax3.scatter(x, y, z, s=rv * 4, c=rgba if len(rgba) else "lime", edgecolors="k", linewidths=0.4, depthshade=True)
         self.ax3.set_title(f"3D frame {idx+1}/{len(self.snaps)} vec={len(vec)} uni={len(att|spr)}", fontsize=9)
         self.ax3.set_xlabel("x")

@@ -65,7 +65,7 @@ def _mats(output_dir):
 def leer_estado_celular(output_dir, frame_idx):
     """Cruza SVG (posición, radio, tipo, color) con cells.mat (estado, núcleo...)."""
     import numpy as _np
-    from .visor_widget import parse_snapshot_svg, leer_bounds, detectar_fila_nrad
+    from .visor_widget import parse_snapshot_svg, leer_bounds, detectar_fila_nrad, leer_z_frame
     snaps = _snapshots(output_dir)
     if not snaps:
         return {"ok": False, "error": "Sin snapshot*.svg en " + str(output_dir)}
@@ -75,6 +75,12 @@ def leer_estado_celular(output_dir, frame_idx):
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error", "?")}
     n = len(r["x"])
+    zt = leer_z_frame(output_dir, idx)
+    z = _np.asarray(zt, float) if zt is not None else _np.zeros(n)
+    if len(z) < n:
+        z = _np.zeros(n)
+    else:
+        z = z[:n]
     tipos = [str(t) if t else "" for t in list(r.get("types", []))]
     estados = ["desconocido"] * n
     vols = [None] * n
@@ -140,7 +146,7 @@ def leer_estado_celular(output_dir, frame_idx):
         except Exception:
             pass
     return {"ok": True, "idx": idx, "n_snaps": len(snaps), "path": snaps[idx],
-            "x": r["x"], "y": r["y"], "r": r["r"], "rgba": r["rgba"],
+            "x": r["x"], "y": r["y"], "z": z, "r": r["r"], "rgba": r["rgba"],
             "tipos": tipos, "estados": estados, "vols": vols, "pres": pres,
             "ctype": ctype, "nuc": nuc, "nuc_real": nuc_real,
             "ids": ids, "ciclo": ciclo, "fase": fase, "mig": mig,
@@ -165,15 +171,15 @@ class DialogoVTK(QDialog):
         self.titulo = titulo
         self.colores = dict(COLORES_ESTADO)
         self.modo = "estado"
-        self.setWindowTitle("PhysiCell Lab — Tumor 3D (PyVista/VTK)")
+        self.setWindowTitle("PhysiCell Manager — Tumor 3D (PyVista/VTK)")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(900, 700)
         self.resize(1280, 780)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
         # ---- panel lateral ----
         side = QWidget()
-        side.setFixedWidth(330)
+        side.setFixedWidth(420)
         sl = QVBoxLayout(side)
         sl.setSpacing(6)
         t = QLabel(titulo)
@@ -223,25 +229,10 @@ class DialogoVTK(QDialog):
         for c in (self.chk_nuc, self.chk_vec, self.chk_att, self.chk_sub, self.chk_org):
             c.stateChanged.connect(lambda _: self.refrescar())
             sl.addWidget(c)
-        sl.addWidget(QLabel("<b>Corte</b>"))
-        self.chk_corte = QCheckBox("Plano de corte")
-        self.chk_corte.setToolTip("Explora el interior del tumor desplazando el plano")
-        self.chk_corte.stateChanged.connect(lambda _: self.refrescar())
-        sl.addWidget(self.chk_corte)
-        self.cmb_eje = QComboBox()
-        self.cmb_eje.addItems(["X", "Y", "Z"])
-        self.cmb_eje.setToolTip("Eje perpendicular al plano de corte")
-        self.cmb_eje.currentTextChanged.connect(lambda _: self._corte())
-        sl.addWidget(self.cmb_eje)
-        self.sld_corte = QSlider(Qt.Orientation.Horizontal)
-        self.sld_corte.setRange(0, 100)
-        self.sld_corte.setValue(50)
-        self.sld_corte.valueChanged.connect(lambda _: self._corte())
-        sl.addWidget(self.sld_corte)
         sl.addWidget(QLabel("<b>Célula seleccionada</b>"))
         self.info = QTextEdit()
         self.info.setReadOnly(True)
-        self.info.setMinimumHeight(340)
+        self.info.setMinimumHeight(500)
         self.info.setStyleSheet("""
             font-family: Consolas, monospace;
             font-size: 12px;
@@ -251,7 +242,9 @@ class DialogoVTK(QDialog):
             padding: 6px;
         """)
         self.info.setPlaceholderText("Haz clic en una célula para consultar su información.")
-        sl.addWidget(self.info)
+        from PyQt6.QtWidgets import QSizePolicy as _QSP
+        self.info.setSizePolicy(_QSP.Expanding, _QSP.MinimumExpanding)
+        sl.addWidget(self.info, 1)
         row_sel = QHBoxLayout()
         self.btn_centrar = QPushButton("Centrar cámara")
         self.btn_centrar.setToolTip("Centra la cámara en la célula seleccionada")
@@ -323,7 +316,6 @@ class DialogoVTK(QDialog):
                                               show_point=False, use_picker=True)
         except Exception:
             pass
-        self._actores_corte = []
         self._pintar_colores()
         self._cargar_frames()
         self._luces()
@@ -455,7 +447,6 @@ class DialogoVTK(QDialog):
         self.plotter.clear()
         self.plotter.set_background("#141414")
         self._luces()
-        self._actores_corte = []
         if not self.snaps:
             self.lbl_frame.setText("Sin snapshot*.svg. Ejecuta PhysiCell primero.")
             return
@@ -466,7 +457,10 @@ class DialogoVTK(QDialog):
             return
         x, y = _np.asarray(d["x"], float), _np.asarray(d["y"], float)
         n = len(x)
-        z = _np.zeros(n)
+        zt = d.get("z")
+        z = _np.asarray(zt, float) if zt is not None else _np.zeros(n)
+        if len(z) != n:
+            z = _np.zeros(n)
         try:
             rv = _np.asarray(d["r"], float)
         except Exception:
@@ -552,8 +546,6 @@ class DialogoVTK(QDialog):
                 actor = self.plotter.add_mesh(glyph, color=color, smooth_shading=True,
                                              ambient=0.25, diffuse=0.85,
                                              specular=0.4, specular_power=30, name=nombre)
-            self._actores_corte.append(actor)
-            # --- núcleo interior: radio nuclear real o aproximación etiquetada ---
             if self.chk_nuc.isChecked():
                 nrad = []
                 res_n = res_nuc_por_tipo.get(str(tipos[ids[0]] if ids[0] < len(tipos) else ""),
@@ -572,7 +564,6 @@ class DialogoVTK(QDialog):
                 a2 = self.plotter.add_mesh(gly_n, color=ncol, smooth_shading=True,
                                           ambient=0.3, diffuse=0.9,
                                           specular=0.12, specular_power=10, name=nombre + ":nucleo")
-                self._actores_corte.append(a2)
         # --- interacciones ---
         from .visor_widget import leer_grafo
         pos = {i: (float(x[i]), float(y[i]), 0.0) for i in range(n)}
@@ -643,7 +634,12 @@ class DialogoVTK(QDialog):
         from collections import Counter as _C
         if modo == "tipo":
             ct = _C(str(t) for t in tipos if t)
-            leg = "Tipos: " + ", ".join(f"{k} ({v})" for k, v in sorted(ct.items(), key=str))
+            tset = sorted(set(str(t) for t in tipos if t), key=str) or ["default"]
+            partes = []
+            for k, t in enumerate(tset):
+                col = PALETA_TIPOS[k % len(PALETA_TIPOS)]
+                partes.append(f"{t} ({ct.get(t, 0)}) #{str(col).lstrip('#')}")
+            leg = "Tipos: " + ", ".join(partes)
         elif modo == "variable":
             if vals_range:
                 vmin, vmax = vals_range
@@ -671,7 +667,6 @@ class DialogoVTK(QDialog):
                 except Exception:
                     pass
                 self.info.setPlainText("La célula seleccionada ya no está presente en este frame.")
-        self._corte()
         if not getattr(self, "_cam_init", False):
             self._encuadrar()
         else:
@@ -679,54 +674,6 @@ class DialogoVTK(QDialog):
                 self.plotter.render()
             except Exception:
                 pass
-
-    def _corte(self):
-        if not self.chk_corte.isChecked():
-            try:
-                for a in self._actores_corte:
-                    a.mapper.SetClippingPlanes(None)
-            except Exception:
-                pass
-            return
-        try:
-            import vtk
-            import numpy as _np
-            bounds = []
-            for a in self._actores_corte:
-                try:
-                    b = a.GetBounds()
-                    if b:
-                        bounds.append(b)
-                except Exception:
-                    pass
-            eje = self.cmb_eje.currentText() if hasattr(self, "cmb_eje") else "X"
-            k = {"X": 0, "Y": 1, "Z": 2}.get(eje, 0)
-            if bounds:
-                lo = min(b[2 * k] for b in bounds)
-                hi = max(b[2 * k + 1] for b in bounds)
-            else:
-                lo, hi = (-500.0, 500.0) if k < 2 else (-10.0, 10.0)
-            v0 = lo + (hi - lo) * self.sld_corte.value() / 100.0
-            normal = [0, 0, 0]
-            normal[k] = 1
-            origin = [0, 0, 0]
-            origin[k] = v0
-            plane = vtk.vtkPlane()
-            plane.SetNormal(*normal)
-            plane.SetOrigin(*origin)
-            planes = vtk.vtkPlanes()
-            planes.SetPlanes(plane)
-            for a in self._actores_corte:
-                try:
-                    a.mapper.SetClippingPlanes(planes)
-                except Exception:
-                    pass
-            try:
-                self.plotter.render()
-            except Exception:
-                pass
-        except Exception:
-            pass
 
     # ---- selección por ID estable ----
     def _atajos(self):
@@ -895,9 +842,10 @@ class DialogoVTK(QDialog):
         try:
             import numpy as _np
             r = float(d["r"][i]) * 1.18 + 1.0
-            sph = pv.Sphere(radius=r, center=(float(d["x"][i]), float(d["y"][i]), 0.0),
+            zz = float(d["z"][i]) if (d.get("z") and i < len(d["z"])) else 0.0
+            sph = pv.Sphere(radius=r, center=(float(d["x"][i]), float(d["y"][i]), zz),
                             theta_resolution=20, phi_resolution=20)
-            self.plotter.add_mesh(sph, color="#84CC16", style="wireframe", line_width=2.5,
+            self.plotter.add_mesh(sph, color="#FFFFFF", style="wireframe", line_width=2.5,
                                  name="seleccion")
             self.plotter.render()
         except Exception:
@@ -912,11 +860,12 @@ class DialogoVTK(QDialog):
             ids = d.get("ids", list(range(len(d["x"]))))
             i = list(ids).index(self._sel_id)
             x, y = float(d["x"][i]), float(d["y"][i])
+            z = float(d["z"][i]) if (d.get("z") and i < len(d["z"])) else 0.0
             cam = self.plotter.camera
             px, py, pz = cam.GetPosition()
             dist = float(_np.sqrt((px - x) ** 2 + (py - y) ** 2 + pz ** 2)) or 300.0
-            cam.SetFocalPoint(x, y, 0.0)
-            cam.SetPosition(x + dist * 0.45, y - dist * 0.55, dist * 0.55)
+            cam.SetFocalPoint(x, y, z)
+            cam.SetPosition(x + dist * 0.45, y - dist * 0.55, z + dist * 0.55)
             self.plotter.renderer.ResetCameraClippingRange()
             self.plotter.render()
         except Exception:
@@ -950,6 +899,13 @@ class DialogoVTK(QDialog):
             return
         import numpy as _np
         x, y = _np.asarray(d["x"], float), _np.asarray(d["y"], float)
+        n = len(x)
+        zt = d.get("z")
+        z = _np.asarray(zt, float) if zt is not None else _np.zeros(len(x), dtype=float)
+        if len(z) < len(x):
+            z = _np.zeros(len(x), dtype=float)
+        elif len(z) > len(x):
+            z = z[:len(x)]
         tip = d["tipos"][i] if i < len(d["tipos"]) else ""
         est = d["estados"][i] if i < len(d["estados"]) else "?"
         vol = d["vols"][i] if i < len(d["vols"]) else None
@@ -969,8 +925,18 @@ class DialogoVTK(QDialog):
         L.append(f"ID: {self._sel_id}")
         L.append(f"Tipo: {tip or cty if (tip or cty) not in (None, '') else 'No disponible'}")
         L.append(f"Estado: {est}")
+        L.append(f"Células en el frame: {n}")
+        if self.modo == "tipo":
+            tsel = str(tip or cty or "")
+            try:
+                tset = sorted(set(str(t) for t in (d.get("tipos") or []) if t), key=str) or ["default"]
+                if tsel in tset:
+                    k = tset.index(tsel)
+                    L.append(f"Color tipo: {PALETA_TIPOS[k % len(PALETA_TIPOS)]}")
+            except Exception:
+                pass
         L.append(f"Frame: {d.get('idx', 0)+1}/{d.get('n_snaps', '?')} — {d.get('time', '')}")
-        L.append(f"Posición: ({x[i]:.1f}, {y[i]:.1f}, 0.0) µm")
+        L.append(f"Posición: ({x[i]:.1f}, {y[i]:.1f}, {float(z[i]):.1f}) µm")
         L.append("— Geometría —")
         L.append(f"Radio: {d['r'][i] if i < len(d['r']) else 'No disponible'} µm")
         if nr:
@@ -987,9 +953,23 @@ class DialogoVTK(QDialog):
         L.append(f"Presión: {pre if pre is not None else 'No disponible'}")
         L.append(f"Contactos: {nvec}")
         L.append(f"Ciclo: {cic if cic is not None else 'No disponible'} / fase {fas if fas is not None else '—'}")
+        L.append(f"Fase: {fas if fas is not None else '—'}")
         L.append(f"Migración: {mig if mig is not None else 'No disponible'}")
         L.append(f"Adhesión: {adh if adh is not None else 'No disponible'} / BM: {cbm if cbm is not None else 'No disponible'}")
-        self.info.setPlainText("\n".join(str(t) for t in L))
+        from html import escape as _he
+        html_parts = []
+        for t in L:
+            s = str(t)
+            if s.startswith("Color tipo:"):
+                col_v = s.split("Color tipo:", 1)[1].strip()
+                html_parts.append(f'<p><span style="color:{col_v};font-weight:bold;">{_he(str(tsel))}</span></p>')
+            else:
+                html_parts.append(f"<p>{_he(s)}</p>")
+        if any(str(t).startswith("Color tipo:") for t in L):
+            # modo "tipo": el nombre del tipo se muestra en su color visual
+            self.info.setHtml("".join(html_parts))
+        else:
+            self.info.setPlainText("\n".join(str(t) for t in L))
 
     def _vec_frame(self):
         try:

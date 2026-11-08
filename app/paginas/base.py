@@ -59,11 +59,38 @@ ESTADO_BOTON = {
 }
 
 
-def exp_estado(n_runs, n_running, n_failed, n_completed, xml_ok):
+def _estado_de_tanda(tanda):
+    """Etiqueta de estado para la última tanda de réplicas.
+
+    Devuelve ``None`` si no hay datos suficientes para decidir.
+    """
+    estados = [str(e or "").strip().lower() for e in (tanda or [])]
+    if not estados:
+        return None
+    if any(e in ("running", "registered", "pending") for e in estados):
+        return "En ejecución"
+    if any(e in ("failed", "cancelled") for e in estados):
+        return "Con errores"
+    if all(e == "completed" for e in estados):
+        return "Completado"
+    return None
+
+
+def exp_estado(n_runs, n_running, n_failed, n_completed, xml_ok, tanda=None):
+    """Estado visible del experimento.
+
+    ``tanda`` son los estados de las réplicas de la última ejecución. Si esa
+    tanda terminó bien, el experimento se muestra como completado aunque en el
+    historial queden fallos antiguos (por ejemplo, de antes de corregir el
+    entorno o el XML). Si no se recibe ``tanda``, se usa el criterio histórico.
+    """
     if n_running > 0:
         return "En ejecución"
+    estado_tanda = _estado_de_tanda(tanda)
+    if estado_tanda:
+        return estado_tanda
     if n_failed > 0:
-        return "Error"
+        return "Con errores"
     if n_completed > 0:
         return "Completado"
     if n_runs > 0:
@@ -79,15 +106,17 @@ def estadisticas_experimento(conn, eid):
     return SIM.estadisticas_experimento(conn, eid)
 
 
-def estado_general_experimento(n_runs, n_running, n_failed, n_completed, xml_ok):
+def estado_general_experimento(n_runs, n_running, n_failed, n_completed, xml_ok,
+                               tanda=None):
     """Determina el estado general del experimento y su clave de color.
 
     Prioridad:
     1. Hay réplicas en curso → En ejecución
-    2. Hay réplicas fallidas/canceladas → Con errores
-    3. Hay réplicas completadas y al menos una run → Completado
-    4. Tiene XML válido pero sin runs → Configurado
-    5. Sin XML → Sin configurar
+    2. La última tanda de réplicas terminó bien → Completado
+    3. La última tanda tiene fallos → Con errores
+    4. Sin datos de la última tanda: criterio histórico (fallos → Con errores)
+    5. Tiene XML válido pero sin runs → Configurado
+    6. Sin XML → Sin configurar
     """
     # Defensa contra valores None o str (pueden venir de SUM sin COALESCE en consultas
     # antiguas o de datos preexistentes en la base de datos de usuario)
@@ -109,6 +138,13 @@ def estado_general_experimento(n_runs, n_running, n_failed, n_completed, xml_ok)
         n_completed = 0
 
     if n_running > 0:
+        return "En ejecución", "en_ejecucion"
+    estado_tanda = _estado_de_tanda(tanda)
+    if estado_tanda == "Completado":
+        return "Completado", "completado"
+    if estado_tanda == "Con errores":
+        return "Con errores", "con_errores"
+    if estado_tanda == "En ejecución":
         return "En ejecución", "en_ejecucion"
     if n_failed > 0:
         return "Con errores", "con_errores"
@@ -251,6 +287,12 @@ class CampoFormulario(QWidget):
         lay.addWidget(widget, 1)
 
 
+def resumen_texto(texto, maximo=140):
+    """Una sola linea corta para celdas de tabla (el texto completo va aparte)."""
+    limpio = " ".join((texto or "").split())
+    return limpio if len(limpio) <= maximo else limpio[: maximo - 1] + "…"
+
+
 class TablaBase(QTableWidget):
     """Tabla con estilo oscuro consistente, encabezados y selección unificados."""
 
@@ -269,8 +311,11 @@ class TablaBase(QTableWidget):
         self.setRowCount(len(filas))
         for i, fila in enumerate(filas):
             for j, valor in enumerate(fila):
-                item = QTableWidgetItem(str(valor or ""))
+                texto = "" if valor is None else str(valor)
+                item = QTableWidgetItem(texto)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if len(texto) > 28:
+                    item.setToolTip(texto)
                 self.setItem(i, j, item)
 
     def vaciar(self):

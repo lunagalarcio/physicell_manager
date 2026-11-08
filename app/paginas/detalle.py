@@ -3,6 +3,7 @@ Visualización 2D/3D, Resultados, Comparación y Reportes."""
 import os
 import sqlite3
 from datetime import datetime
+from html import escape as _escape
 
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, QFileDialog,
@@ -11,13 +12,13 @@ from PyQt6.QtWidgets import (
     QGridLayout, QDialog, QFormLayout, QDialogButtonBox, QSizePolicy, QFrame, QWidget,
     QApplication, QInputDialog
 )
-from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 
 from .base import (
     PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, exe_estado,
     exp_estado, ESTILO_ESTADO, ESTADO_BOTON, CampoFormulario, DialogoBase,
-    TablaBase, ESPACIO_M, ESPACIO_L, TAM_H2,
+    TablaBase, ESPACIO_M, ESPACIO_L, TAM_H2, resumen_texto,
 )
 from .. import simulador as SIM
 from ..xml_validator import validar_config, validar_texto
@@ -25,6 +26,46 @@ from ..motor_physicell import MotorPhysiCell
 from ..visor_widget import VisorPhysiCell
 from ..visor3d_vtk import abrir_vtk
 from ..exportacion import generar_video_2d, generar_video_3d_vtk
+from .dialogo_run import DialogoDetalleRun
+
+
+# Estado de una réplica -> color del texto en las tablas
+_COLOR_ESTADO_RUN = {
+    "completed": "#3DDC84",
+    "failed": "#FF6B6B",
+    "cancelled": "#FFB020",
+    "running": "#4DA3FF",
+    "registered": "#A6A6A6",
+    "pending": "#A6A6A6",
+}
+
+
+class _DiagWorker(QThread):
+    """Ejecuta el autodiagnóstico del motor sin congelar la interfaz."""
+
+    done = pyqtSignal(dict)
+
+    def __init__(self, exe, xml, log_path, padre=None):
+        super().__init__(padre)
+        self.exe = exe
+        self.xml = xml
+        self.log_path = log_path
+
+    def run(self):
+        try:
+            from ..motor_physicell import MotorPhysiCell
+            r = MotorPhysiCell().autodiagnostico(
+                self.exe, self.xml, log_path=self.log_path
+            )
+        except Exception as e:
+            r = {
+                "ok": False,
+                "problemas": [f"Error inesperado del diagnóstico: {e}"],
+                "avisos": [],
+                "log_path": self.log_path,
+                "duracion": 0.0,
+            }
+        self.done.emit(r)
 
 
 class PaginaDetalle(PaginaBase):
@@ -84,9 +125,18 @@ class PaginaDetalle(PaginaBase):
         n_run = sum(1 for x in runs if x[2] == "running")
         n_fail = sum(1 for x in runs if x[2] in ("failed", "cancelled"))
         n_ok = sum(1 for x in runs if x[2] == "completed")
+        tanda = SIM.tanda_de_estados([(x[0], x[1], x[2]) for x in runs])
         xe, _ = xml_estado(cfg)
-        estado = exp_estado(len(runs), n_run, n_fail, n_ok, xe == "Válido")
+        estado = exp_estado(len(runs), n_run, n_fail, n_ok, xe == "Válido", tanda)
         col = ESTILO_ESTADO.get(estado, "#A6A6A6")
+
+        # Si la última tanda falló, mostrar el motivo junto al estado
+        detalle_error = ""
+        if estado == "Con errores" and runs:
+            ultima = max(runs, key=lambda x: x[0] or 0)
+            motivo = (ultima[6] or "").strip() if len(ultima) > 6 else ""
+            if motivo:
+                detalle_error = " · " + _escape(" ".join(motivo.split())[:120])
 
         head = QHBoxLayout()
         left = QVBoxLayout()
@@ -95,7 +145,7 @@ class PaginaDetalle(PaginaBase):
         left.addWidget(h)
         st = QLabel(
             f"<b style='color:{col}'>● {estado}</b> &nbsp; "
-            f"<span style='color:#A6A6A6'>{tags or 'sin etiquetas'} • {n_esc} escenarios • {len(runs)} runs</span>"
+            f"<span style='color:#A6A6A6'>{tags or 'sin etiquetas'} • {n_esc} escenarios • {len(runs)} runs{detalle_error}</span>"
         )
         st.setTextFormat(Qt.TextFormat.RichText)
         left.addWidget(st)
@@ -154,6 +204,14 @@ class PaginaDetalle(PaginaBase):
         v = QVBoxLayout(w)
         v.setSpacing(ESPACIO_M)
 
+        tanda = SIM.tanda_de_estados([(x[0], x[1], x[2]) for x in runs])
+        linea_tanda = ""
+        if tanda:
+            ok = sum(1 for e in tanda if e == "completed")
+            linea_tanda = (
+                f"Última ejecución: <b>{ok}/{len(tanda)}</b> completadas · {estado}<br>"
+            )
+
         info = QLabel(
             f"<h2>{title or f'Experimento {eid}'}</h2>"
             f"<p>{desc or 'Sin descripción'}</p>"
@@ -161,7 +219,7 @@ class PaginaDetalle(PaginaBase):
             f"Creado: {creado or '—'} &nbsp; Modificado: {modif or '—'}<br>"
             f"Etiquetas: {tags or '—'}</p>"
             f"<p>Escenarios: <b>{n_esc}</b> &nbsp; Ejecuciones: <b>{len(runs)}</b><br>"
-            f"XML: {cfg or 'no asignado'}</p>"
+            f"{linea_tanda}XML: {cfg or 'no asignado'}</p>"
         )
         info.setWordWrap(True)
         v.addWidget(info)
@@ -220,6 +278,11 @@ class PaginaDetalle(PaginaBase):
         self.cfg_out.setWordWrap(True)
         v.addWidget(self.cfg_out)
 
+        self.cfg_salidas = QLabel("")
+        self.cfg_salidas.setObjectName("Muted")
+        self.cfg_salidas.setWordWrap(True)
+        v.addWidget(self.cfg_salidas)
+
         self.cfg_estado = QLabel("")
         self.cfg_estado.setWordWrap(True)
         v.addWidget(self.cfg_estado)
@@ -228,6 +291,13 @@ class PaginaDetalle(PaginaBase):
         b1 = QPushButton("Validar archivos")
         b1.setObjectName("Secondary")
         b1.clicked.connect(self._validar_detalle)
+        self.btn_probar = QPushButton("Probar motor")
+        self.btn_probar.setObjectName("Secondary")
+        self.btn_probar.setToolTip(
+            "Ejecuta PhysiCell con un XML reducido para comprobar que arranca, "
+            "termina y guarda resultados. Detecta DLLs incompatibles en segundos."
+        )
+        self.btn_probar.clicked.connect(self._probar_motor)
         b2 = QPushButton("Guardar configuración")
         b2.setObjectName("Primary")
         b2.clicked.connect(self._guardar_cfg_detalle)
@@ -235,6 +305,7 @@ class PaginaDetalle(PaginaBase):
         b3.setObjectName("Secondary")
         b3.clicked.connect(self._editar_xml_detalle)
         btns.addWidget(b1)
+        btns.addWidget(self.btn_probar)
         btns.addWidget(b3)
         btns.addStretch()
         btns.addWidget(b2)
@@ -254,7 +325,40 @@ class PaginaDetalle(PaginaBase):
         cv = QFrame()
         cv.setLayout(vrow)
         v.addWidget(cv)
+
+        # ---------- Versiones de configuración ----------
+        v.addWidget(QLabel("<b>Versiones de configuración</b>: historial de versiones del XML del experimento."))
+        vrow2 = QHBoxLayout()
+        b_nueva_ver = QPushButton("Registrar nueva versión…")
+        b_nueva_ver.setObjectName("Secondary")
+        b_nueva_ver.clicked.connect(self._registrar_version)
+        b_activar = QPushButton("Activar versión seleccionada")
+        b_activar.setObjectName("Secondary")
+        b_activar.clicked.connect(self._activar_version)
+        b_ref = QPushButton("Actualizar")
+        b_ref.setObjectName("Secondary")
+        b_ref.clicked.connect(self._cargar_versiones)
+        vrow2.addWidget(b_nueva_ver)
+        vrow2.addWidget(b_activar)
+        vrow2.addWidget(b_ref)
+        vrow2.addStretch()
+        c2v = QFrame()
+        c2v.setLayout(vrow2)
+        v.addWidget(c2v)
+
+        self.tab_versiones = QTableWidget()
+        self.tab_versiones.setColumnCount(5)
+        self.tab_versiones.setHorizontalHeaderLabels(["Versión", "Nombre", "Archivo XML", "Estado", "Creado"])
+        cab = self.tab_versiones.horizontalHeader()
+        cab.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        cab.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        cab.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        cab.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        cab.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.tab_versiones.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        v.addWidget(self.tab_versiones, 1)
         v.addStretch()
+        self._cargar_versiones()
         self._validar_detalle(silencioso=True)
         return w
 
@@ -268,6 +372,86 @@ class PaginaDetalle(PaginaBase):
         SIM.crear_escenario(conn, eid, nom, cfg, "{}")
         conn.close()
         QMessageBox.information(self.lw, "Variante", f"Escenario '{nom}' creado. Adminístralo en la pestaña Ejecuciones.")
+
+    # ---------- Versiones de configuración (historial) ----------
+
+    def _cargar_versiones(self):
+        """Pinta el historial de versiones de configuración del experimento."""
+        from .. import servicios as SERV
+        from PyQt6.QtWidgets import QTableWidgetItem
+        self.tab_versiones.setRowCount(0)
+        info = None
+        try:
+            info = SERV.obtener_experimento_completo(self.db_path(), self.current_experiment_id)
+        except Exception:
+            info = None
+        cfgs = []
+        if isinstance(info, dict):
+            cfgs = info.get("configuraciones") or []
+        filas = sorted(cfgs, key=lambda c: int(c.get("version") or 0)) if cfgs else []
+        self._versiones_cache = filas
+        for c in filas:
+            r = self.tab_versiones.rowCount()
+            self.tab_versiones.insertRow(r)
+            self.tab_versiones.setItem(r, 0, QTableWidgetItem(str(c.get("version") or "")))
+            self.tab_versiones.setItem(r, 1, QTableWidgetItem(str(c.get("nombre") or "")))
+            xmlp = c.get("xml_path") or ""
+            self.tab_versiones.setItem(r, 2, QTableWidgetItem(os.path.basename(xmlp) if xmlp else "—"))
+            self.tab_versiones.setItem(r, 3, QTableWidgetItem("Activa" if c.get("es_activa") else "Inactiva"))
+            self.tab_versiones.setItem(r, 4, QTableWidgetItem(str(c.get("creado_en") or "")))
+        if not filas:
+            r = self.tab_versiones.rowCount()
+            self.tab_versiones.insertRow(r)
+            for j, txt in enumerate(["Sin versiones registradas", "", "", "", ""]):
+                self.tab_versiones.setItem(r, j, QTableWidgetItem(txt))
+
+    def _registrar_version(self):
+        """Registra una nueva versión de configuración (con copia resguardo) para el experimento."""
+        from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+        from .. import servicios as SERV
+        xml_path, _filtro = QFileDialog.getOpenFileName(
+            self.lw, "Registrar versión — XML de PhysiCell", "",
+            "XML (*.xml)")
+        if not xml_path:
+            return
+        nombre, ok = QInputDialog.getText(self.lw, "Registrar versión", "Nombre de la versión:", text="v")
+        if not ok or not (nombre or "").strip():
+            return
+        r = SERV.registrar_nueva_configuracion(
+            self.db_path(), self.current_experiment_id, nombre.strip(), xml_path, activar=True)
+        if r.get("ok"):
+            QMessageBox.information(self.lw, "Versiones", f"Versión registrada correctamente.")
+            if hasattr(self, "cfg_xml"):
+                self.cfg_xml.setText(xml_path)
+            self._cargar_versiones()
+            self.lw.refrescar_detalle()
+        else:
+            QMessageBox.warning(self.lw, "Versiones", r.get("error", "Error al registrar la versión."))
+
+    def _activar_version(self):
+        """Activa (restaura) una versión del historial para el experimento."""
+        from PyQt6.QtWidgets import QMessageBox
+        from .. import servicios as SERV
+        fila = self.tab_versiones.currentRow()
+        if fila < 0:
+            QMessageBox.warning(self.lw, "Versiones", "Selecciona una versión del historial.")
+            return
+        cache = getattr(self, "_versiones_cache", None) or []
+        if fila >= len(cache):
+            return
+        c = cache[fila]
+        if c.get("es_activa"):
+            return
+        ok = SERV.activar_configuracion_servicio(self.db_path(), c.get("id"))
+        if ok.get("ok"):
+            QMessageBox.information(self.lw, "Versiones", f"Versión {c.get('version')} ({c.get('nombre')}) activada.")
+            if c.get("xml_path"):
+                self.cfg_xml.setText(c.get("xml_path") or "")
+                self._validar_detalle(silencioso=True)
+            self._cargar_versiones()
+            self.lw.refrescar_detalle()
+        else:
+            QMessageBox.warning(self.lw, "Versiones", ok.get("error", "No se pudo activar la versión."))
 
     def _browse_cfg_detalle(self):
         f, _ = QFileDialog.getOpenFileName(self.lw, "XML del experimento", "", "XML (*.xml)")
@@ -296,10 +480,78 @@ class PaginaDetalle(PaginaBase):
 
     def _validar_detalle(self, silencioso=False):
         xe, _ = xml_estado(self.cfg_xml.text().strip())
-        ee, _ = exe_estado(self.cfg_exe.text().strip())
+        exe = self.cfg_exe.text().strip()
+        ee, _ = exe_estado(exe)
+        from ..motor_physicell import verificar_binario, intervalos_guardado
+        problemas = verificar_binario(exe) if exe else []
+
+        iv = intervalos_guardado(self.cfg_xml.text().strip())
+        salidas = []
+        if iv["svg"] > 0:
+            salidas.append(f"SVG cada {iv['svg']:g} min")
+        if iv["full_data"] > 0:
+            salidas.append(f"datos completos cada {iv['full_data']:g} min")
+        texto_salidas = ("Salidas del XML: " + " · ".join(salidas)) if salidas else (
+            "Salidas del XML: el XML no guarda resultados "
+            "(revisa <save><full_data> y <save><SVG>)."
+        )
+        if hasattr(self, "cfg_salidas"):
+            self.cfg_salidas.setText(texto_salidas)
+
         self.cfg_estado.setText(f"XML: {xe}   •   Motor: {ee}")
+        self.cfg_estado.setToolTip(
+            "\n".join(f"- {p}" for p in problemas) if problemas else "Motor listo para ejecutar."
+        )
         if not silencioso:
-            QMessageBox.information(self.lw, "Validación", f"XML: {xe}\nMotor: {ee}")
+            detalle = ""
+            if problemas:
+                detalle = "\n\nProblemas del motor:\n- " + "\n- ".join(problemas)
+            QMessageBox.information(
+                self.lw, "Validación",
+                f"XML: {xe}\nMotor: {ee}\n{texto_salidas}{detalle}",
+            )
+
+    def _probar_motor(self):
+        """Lanza PhysiCell con un XML reducido para comprobar que funciona."""
+        exe = self.cfg_exe.text().strip()
+        xml = self.cfg_xml.text().strip()
+        if not xml or not os.path.isfile(xml):
+            QMessageBox.warning(self.lw, "Probar motor",
+                                "Selecciona primero un XML que exista.")
+            return
+        if not exe or not os.path.isfile(exe):
+            QMessageBox.warning(self.lw, "Probar motor",
+                                "Selecciona el ejecutable de PhysiCell (project.exe).")
+            return
+        log = os.path.join(os.path.dirname(self.db_path()), "diagnostico_motor.log")
+        self.btn_probar.setEnabled(False)
+        self.btn_probar.setText("Probando…")
+        self._diag = _DiagWorker(exe, xml, log, self)
+        self._diag.done.connect(self._diag_listo)
+        self._diag.start()
+
+    def _diag_listo(self, r):
+        self.btn_probar.setEnabled(True)
+        self.btn_probar.setText("Probar motor")
+        lineas = []
+        if r.get("ok"):
+            lineas.append(
+                f"Motor OK: arrancó y guardó {r.get('n_svg', 0)} SVG, "
+                f"{r.get('n_xml', 0)} XML y {r.get('n_mat', 0)} .mat "
+                f"en {r.get('duracion', 0):.1f} s."
+            )
+        else:
+            lineas.append("El motor NO superó la prueba:")
+            lineas += [f"- {p}" for p in (r.get("problemas") or ["sin detalle"])]
+        for a in r.get("avisos") or []:
+            lineas.append(f"Aviso: {a}")
+        if r.get("log_path"):
+            lineas.append(f"\nRegistro: {r['log_path']}")
+        texto = "\n".join(lineas)
+        if hasattr(self, "run_log"):
+            self.run_log.append(texto)
+        icono = QMessageBox.Icon.Information if r.get("ok") else QMessageBox.Icon.Warning
+        QMessageBox(icono, "Probar motor", texto[:4000], parent=self.lw).exec()
 
     def _guardar_cfg_detalle(self):
         p = self.cfg_xml.text().strip()
@@ -430,6 +682,20 @@ class PaginaDetalle(PaginaBase):
             h.addWidget(bb)
             v.addWidget(f)
 
+        # Selector de escenario (variante) para las réplicas a lanzar
+        row_esc = QHBoxLayout()
+        row_esc.addWidget(QLabel("Escenario (variante):"))
+        self.run_escenario = QComboBox()
+        self.run_escenario.addItem("Sin escenario (configuración activa del experimento)", None)
+        self._escenarios_ejecucion = []
+        for s in escs:
+            self.run_escenario.addItem(f"#{s[0]} {s[1]}", s[0])
+            self._escenarios_ejecucion.append(tuple(s))
+        row_esc.addWidget(self.run_escenario)
+        cesc = QFrame()
+        cesc.setLayout(row_esc)
+        v.addWidget(cesc)
+
         info = QLabel("Lanza réplicas en segundo plano. El progreso usa el tiempo simulado real de PhysiCell.")
         info.setObjectName("Muted")
         info.setWordWrap(True)
@@ -441,6 +707,15 @@ class PaginaDetalle(PaginaBase):
         self.run_reps.setRange(1, 50)
         self.run_reps.setValue(getattr(self, "cfg_reps", QSpinBox()).value() if hasattr(self, "cfg_reps") else 3)
         row.addWidget(self.run_reps)
+        row.addWidget(QLabel("Límite por réplica (min):"))
+        self.run_timeout = QSpinBox()
+        self.run_timeout.setRange(0, 10080)  # hasta 7 dias; 0 = sin limite
+        self.run_timeout.setValue(0)
+        self.run_timeout.setToolTip(
+            "0 = sin límite absoluto (recomendado).\n"
+            "Si el motor deja de escribir 10 min seguidos, se cancela y se explica."
+        )
+        row.addWidget(self.run_timeout)
         self.btn_run = QPushButton("Ejecutar")
         self.btn_run.setObjectName("Primary")
         self.btn_run.clicked.connect(self._ejecutar)
@@ -462,8 +737,73 @@ class PaginaDetalle(PaginaBase):
         self.run_log.setReadOnly(True)
         self.run_log.setMaximumHeight(160)
         v.addWidget(self.run_log)
-        v.addStretch()
+
+        v.addWidget(QLabel("<b>Réplicas de este experimento</b>"))
+        self.runs_table = TablaBase(
+            ["Run", "Estado", "Inicio", "Fin", "Motivo del error", "Registro"]
+        )
+        cab = self.runs_table.horizontalHeader()
+        cab.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        cab.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        cab.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.runs_table.itemDoubleClicked.connect(self._ver_detalle_run)
+        self._cargar_runs_tabla(eid)
+        v.addWidget(self.runs_table, 1)
         return w
+
+    def _cargar_runs_tabla(self, eid=None):
+        """Vuelca las réplicas con estado, motivo del fallo y registro del motor."""
+        eid = self.current_experiment_id if eid is None else eid
+        if not eid or not hasattr(self, "runs_table"):
+            return
+        filas = []
+        self._filas_runs = []
+        for r in self._runs_exp(eid):
+            motivo = r[6] or ""
+            if not motivo and r[2] in ("failed", "cancelled"):
+                motivo = "Sin detalle registrado (ejecución anterior a esta versión)"
+            log_path = r[7] if len(r) > 7 else ""
+            pid = r[8] if len(r) > 8 else None
+            batch_id = r[9] if len(r) > 9 else None
+            self._filas_runs.append({
+                "experimento": self.current_experiment_id,
+                "replica": r[1],
+                "estado": r[2],
+                "inicio": r[3] or "",
+                "fin": r[4] or "",
+                "motivo": motivo,
+                "salida": r[5] or "",
+                "log_path": log_path or "",
+                "pid": pid,
+                "batch_id": batch_id,
+            })
+            filas.append((
+                r[1], r[2], r[3] or "", r[4] or "", resumen_texto(motivo),
+                "Ver salida" if log_path else "sin registro",
+            ))
+        self.runs_table.cargar(filas)
+        for i, datos in enumerate(self._filas_runs):
+            it = self.runs_table.item(i, 4)
+            if it is not None:
+                it.setToolTip(datos["motivo"])
+            it_log = self.runs_table.item(i, 5)
+            if it_log is not None:
+                it_log.setToolTip(
+                    datos["log_path"] or
+                    "Esta ejecución no tiene registro del motor guardado."
+                )
+                if not datos["log_path"]:
+                    it_log.setForeground(QColor("#7A7A7A"))
+        for i in range(self.runs_table.rowCount()):
+            it = self.runs_table.item(i, 1)
+            if it is not None:
+                it.setForeground(QColor(_COLOR_ESTADO_RUN.get(it.text(), "#A6A6A6")))
+
+    def _ver_detalle_run(self, item):
+        fila = item.row()
+        datos = (self._filas_runs[fila] if getattr(self, "_filas_runs", None)
+                 and fila < len(self._filas_runs) else {})
+        DialogoDetalleRun(datos, padre=self).exec()
 
     def _ejecutar(self):
         try:
@@ -483,12 +823,44 @@ class PaginaDetalle(PaginaBase):
 
     def _ejecutar_interno(self):
         eid = self.current_experiment_id
+        # RF05: escenario (variante) seleccionado -> define la config y vincula la réplica
+        esc_id = self.run_escenario.currentData() if hasattr(self, "run_escenario") else None
+        esc_sid = int(esc_id) if esc_id is not None else None
         base = self.cfg_xml.text().strip() if hasattr(self, "cfg_xml") else ""
-        if not base:
+        cfg_id = None
+        if esc_sid is not None:
+            base = next(
+                (str(s[2] or "") for s in (getattr(self, "_escenarios_ejecucion", None) or [])
+                 if int(s[0]) == esc_sid),
+                "",
+            )
+            conn_e = self.conn()
+            try:
+                row_e = conn_e.execute(
+                    "SELECT configuracion_id FROM escenarios WHERE id=?", (esc_sid,)
+                ).fetchone()
+            finally:
+                conn_e.close()
+            cfg_id = row_e[0] if row_e else None
+        else:
+            from ..nucleo import configuracion_activa
+            conn_e = self.conn()
+            try:
+                ca = configuracion_activa(conn_e, eid)
+            finally:
+                conn_e.close()
+            cfg_id = ca[0] if ca else None
+        if not (base or "").strip():
             QMessageBox.warning(self.lw, "Ejecución", "Asigna el XML en la pestaña Configuración.")
             return
-        if not validar_config(base).get("ok"):
-            QMessageBox.warning(self.lw, "Ejecución", "El XML del experimento no es válido.")
+        v = validar_config(base)
+        if not v.get("ok"):
+            motivos = "; ".join(v.get("errores", [])) or "sin detalle del validador"
+            self.run_log.append(f"XML inválido: {motivos}")
+            QMessageBox.warning(
+                self.lw, "Ejecución",
+                f"El XML del experimento no es válido:\n\n{motivos}\n\n{v.get('path', base)}",
+            )
             return
         n = self.run_reps.value()
         exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
@@ -497,13 +869,14 @@ class PaginaDetalle(PaginaBase):
 
         # Persistencia automática: guarda el motor y custom.cpp/h en la BD aunque no se cierre la pestaña
         from .. import servicios as SERV
-        SERV.actualizar_rutas_experimento(
-            self.db_path(), eid,
-            config_xml_path=base,
-            binary_path=exe,
-            custom_cpp_path=cpp,
-            custom_h_path=hh,
-        )
+        if esc_sid is None:
+            SERV.actualizar_rutas_experimento(
+                self.db_path(), eid,
+                config_xml_path=base,
+                binary_path=exe,
+                custom_cpp_path=cpp,
+                custom_h_path=hh,
+            )
         self.lw._last_exe = exe
 
         if not exe:
@@ -512,18 +885,28 @@ class PaginaDetalle(PaginaBase):
                 "Configura la ruta del Motor PhysiCell (project.exe) en la pestaña Configuración."
             )
             return
-        if not os.path.isfile(exe):
+        from ..motor_physicell import verificar_binario
+        problemas = verificar_binario(exe)
+        if problemas:
+            detalle = "\n- " + "\n- ".join(problemas)
+            self.run_log.append(f"Motor no usable:{detalle}")
             QMessageBox.warning(
                 self.lw, "Ejecución",
-                f"El ejecutable no existe en la ruta indicada:\n{exe}"
+                "No se puede iniciar PhysiCell porque el motor configurado no es usable:"
+                f"{detalle}\n\nRuta: {exe}"
             )
             return
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
-        self.run_log.append(f"Iniciando {n} réplicas con PhysiCell...")
+        timeout_min = self.run_timeout.value() if hasattr(self, "run_timeout") else 0
+        limite_txt = (f"{timeout_min} min por réplica" if timeout_min
+                      else "sin límite absoluto (watchdog de inactividad 10 min)")
+        self.run_log.append(f"Iniciando {n} réplicas con PhysiCell — {limite_txt}...")
         try:
             from ..nucleo import ReplicaWorker, get_db_path
-            self.worker = ReplicaWorker(eid, base, n, exe, get_db_path())
+            self.worker = ReplicaWorker(eid, base, n, exe, get_db_path(),
+                                        configuracion_id=cfg_id, escenario_id=esc_sid,
+                                        timeout_min=timeout_min)
             self.worker.prog.connect(lambda v, t: (self.run_prog.setValue(v), self.run_log.append(t)))
             self.worker.done.connect(self._run_done)
             self.worker.fail.connect(self._run_fail)
@@ -543,9 +926,26 @@ class PaginaDetalle(PaginaBase):
 
     def _run_done(self, info):
         self.run_prog.setValue(100)
-        self.run_log.append(f"Completado: {info}")
+        fallos = (info.get("fallos") or []) if isinstance(info, dict) else []
         self.btn_run.setEnabled(True)
         self.btn_stop.setEnabled(False)
+        if fallos:
+            self.run_log.append(f"Terminó con {len(fallos)} réplica(s) fallida(s):")
+            for f in fallos:
+                self.run_log.append(f"  • {f}")
+            QMessageBox.warning(
+                self.lw,
+                "Ejecución con errores",
+                f"{len(fallos)} de {info.get('replicas', '?')} réplicas fallaron.\n\n"
+                + "\n\n".join(fallos[:5])[:3000]
+                + "\n\nEl motivo y la salida completa del motor están en la tabla "
+                  "de abajo (columna Registro, doble clic) y en la página Ejecuciones.",
+            )
+        else:
+            self.run_log.append(
+                f"Completado: {info.get('replicas', '?')} réplica(s) sin errores. "
+                "El registro de cada una está en la tabla de abajo (columna Registro)."
+            )
         self.lw.refrescar_detalle()
 
     def _run_fail(self, msg):
@@ -722,7 +1122,8 @@ class PaginaDetalle(PaginaBase):
         conn.close()
         outs = []
         import glob as _g
-        for _id, rnum, st, _s, _e, od in rows:
+        for fila in rows:
+            _id, rnum, st, _s, _e, od = fila[:6]
             if od and os.path.isdir(od):
                 for d in (os.path.join(od, "output"), od):
                     if _g.glob(os.path.join(d, "snapshot*.svg")) or _g.glob(os.path.join(d, "*_cells.mat")):
@@ -777,7 +1178,8 @@ class PaginaDetalle(PaginaBase):
         t.setHorizontalHeaderLabels(["Run", "Estado", "Inicio", "Fin", "Salida"])
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         t.setRowCount(len(runs))
-        for i, (_id, rnum, st, s0, s1, od) in enumerate(runs):
+        for i, fila in enumerate(runs):
+            _id, rnum, st, s0, s1, od = fila[:6]
             for j, val in enumerate([str(rnum), st, s0 or "", s1 or "", od or ""]):
                 t.setItem(i, j, QTableWidgetItem(val))
         t.setMaximumHeight(160)
@@ -846,7 +1248,8 @@ class PaginaDetalle(PaginaBase):
 
     def _res_cargar_reps(self):
         self.res_rep.clear()
-        for _id, rnum, st, _s, _e, od in self._runs_exp(self.current_experiment_id):
+        for fila in self._runs_exp(self.current_experiment_id):
+            _id, rnum, st, _s, _e, od = fila[:6]
             self.res_rep.addItem(f"Réplica {rnum} ({st})", od or "")
         self._res_verificar()
 
@@ -857,6 +1260,8 @@ class PaginaDetalle(PaginaBase):
     def _res_verificar(self):
         from ..visualizador import verificar_integridad, listar_archivos
         d = self._res_rep_dir()
+        if not d:
+            return
         try:
             filas = listar_archivos(d)
         except Exception:
@@ -992,6 +1397,41 @@ class PaginaDetalle(PaginaBase):
         info.setWordWrap(True)
         v.addWidget(info)
 
+        # ---------- Comparación estadística entre experimentos (t de Student) ----------
+        from .. import servicios as SERV
+        from .. import estadistica as EST
+
+        v.addWidget(QLabel("<b>Comparación estadística entre experimentos</b>: prueba t de Student sobre métricas de réplicas (n.º de células finales)."))
+        row_stats = QHBoxLayout()
+        self.cmp_exp_a = QComboBox()
+        self.cmp_exp_b = QComboBox()
+        exps = SERV.listar_experimentos_servicio(self.db_path()) or []
+        for r in exps:
+            self.cmp_exp_a.addItem(f"#{r[0]} {r[1] or ''}", r[0])
+            self.cmp_exp_b.addItem(f"#{r[0]} {r[1] or ''}", r[0])
+        if self.cmp_exp_b.count() > 1:
+            self.cmp_exp_b.setCurrentIndex(1)
+        row_stats.addWidget(QLabel("Del experimento:"))
+        row_stats.addWidget(self.cmp_exp_a, 2)
+        row_stats.addWidget(QLabel("Con el de:"))
+        row_stats.addWidget(self.cmp_exp_b, 2)
+        b_cmp_stats = QPushButton("Ejecutar comparación (t de Student)")
+        b_cmp_stats.setObjectName("Primary")
+        b_cmp_stats.clicked.connect(self._cmp_stats)
+        b_cmp_stats_csv = QPushButton("Exportar CSV")
+        b_cmp_stats_csv.setObjectName("Secondary")
+        b_cmp_stats_csv.clicked.connect(self._cmp_stats_csv)
+        row_stats.addWidget(b_cmp_stats)
+        row_stats.addWidget(b_cmp_stats_csv)
+        sstats = QFrame()
+        sstats.setLayout(row_stats)
+        v.addWidget(sstats)
+
+        self.cmp_stats_out = QTextEdit()
+        self.cmp_stats_out.setReadOnly(True)
+        self.cmp_stats_out.setMaximumHeight(140)
+        v.addWidget(self.cmp_stats_out)
+
         outs = self._salidas_replicas(eid)
         row = QHBoxLayout()
         self.cmp_a = QComboBox()
@@ -1102,6 +1542,67 @@ class PaginaDetalle(PaginaBase):
             self.cmp_img.setPixmap(__import__("PyQt6.QtGui", fromlist=["QPixmap"]).QPixmap(out).scaledToWidth(
                 640, Qt.TransformationMode.SmoothTransformation
             ))
+
+    def _cmp_stats(self):
+        """Ejecuta la comparación estadística (t de Student) entre dos experimentos."""
+        from PyQt6.QtWidgets import QMessageBox
+        from .. import estadistica as EST
+        if self.cmp_exp_a.count() < 1 or self.cmp_exp_b.count() < 1:
+            QMessageBox.warning(self.lw, "Comparación", "No hay experimentos registrados.")
+            return
+        id_a = self.cmp_exp_a.currentData()
+        id_b = self.cmp_exp_b.currentData()
+        if id_a is None or id_b is None or int(id_a) == int(id_b):
+            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
+            return
+        try:
+            r = EST.comparar_experimentos(self.db_path(), [int(id_a), int(id_b)])
+        except Exception as e:
+            QMessageBox.critical(self.lw, "Comparación", f"Error al comparar: {e}")
+            return
+        comps = r.get("comparaciones") or {}
+        clave = f"{int(id_a)}_vs_{int(id_b)}"
+        c = comps.get(clave)
+        if not c:
+            self.cmp_stats_out.setText(
+                f"Experimento {id_a} vs {id_b}\n"
+                "Sin datos comparables: se requieren al menos 2 réplicas válidas por experimento "
+                "para la prueba t de Student."
+            )
+            return
+        sig = "SÍ" if c.get("significativo") else "NO"
+        texto = (
+            f"Experimento {id_a} vs {id_b}\n"
+            f"  n células finales: media={c.get('media1'):.2f} (n={c.get('n1')}, std={c.get('std1'):.2f}) "
+            f"vs {c.get('media2'):.2f} (n={c.get('n2')}, std={c.get('std2'):.2f})\n"
+            f"  t = {c.get('t'):.3f}, p = {c.get('p'):.4f} -> Diferencia significativa: {sig}"
+        )
+        self.cmp_stats_out.setText(texto)
+        self.cmp_stats_out.setReadOnly(True)
+
+    def _cmp_stats_csv(self):
+        """Exporta los datos de réplica (n.º células finales) de la comparación a CSV."""
+        from PyQt6.QtWidgets import QMessageBox
+        from .. import estadistica as EST
+        if self.cmp_exp_a.count() < 1 or self.cmp_exp_b.count() < 1:
+            QMessageBox.warning(self.lw, "Comparación", "No hay experimentos registrados.")
+            return
+        id_a = self.cmp_exp_a.currentData()
+        id_b = self.cmp_exp_b.currentData()
+        if id_a is None or id_b is None or int(id_a) == int(id_b):
+            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
+            return
+        try:
+            r = EST.comparar_experimentos(self.db_path(), [int(id_a), int(id_b)])
+        except Exception as e:
+            QMessageBox.critical(self.lw, "Comparación", f"Error al exportar: {e}")
+            return
+        if not (r.get("comparaciones") or {}):
+            QMessageBox.warning(self.lw, "Comparación", "Sin datos para exportar.")
+            return
+        salida = os.path.join(self._exp_dir(), "comparacion_estadistica.csv")
+        p = EST.exportar_comparacion_csv(r, salida)
+        QMessageBox.information(self.lw, "Comparación", f"CSV exportado:\n{p}")
 
     # =====================================================================
     # Pestaña: Reportes

@@ -5,15 +5,28 @@ import glob
 import xml.etree.ElementTree as ET
 
 
+def _dirs_salida(output_dir):
+    """Carpetas donde PhysiCell deja los resultados (raiz de replica y su output/)."""
+    if not output_dir:
+        return []
+    cands = [output_dir, os.path.join(output_dir, "output")]
+    return [d for d in cands if os.path.isdir(d)]
+
+
 def listar_frames(output_dir):
-    """Retorna dict con svg, outputs xml, mats ordenados."""
-    if not output_dir or not os.path.isdir(output_dir):
+    """Retorna dict con svg, outputs xml, mats ordenados (incluye subcarpeta output/)."""
+    dirs = _dirs_salida(output_dir)
+    if not dirs:
         return {"svg": [], "xml": [], "mat": []}
-    svg = sorted(glob.glob(os.path.join(output_dir, "snapshot*.svg")))
-    xmls = sorted(glob.glob(os.path.join(output_dir, "output*.xml")))
+    svg, xmls, mats = [], [], []
+    for d in dirs:
+        svg += glob.glob(os.path.join(d, "snapshot*.svg"))
+        xmls += glob.glob(os.path.join(d, "output*.xml"))
+        mats += glob.glob(os.path.join(d, "output*_microenvironment*.mat"))
+    svg = sorted(set(svg))
     # excluir initial.xml y config
-    xmls = [p for p in xmls if os.path.basename(p) != "initial.xml"]
-    mats = sorted(glob.glob(os.path.join(output_dir, "output*_microenvironment*.mat")))
+    xmls = sorted(p for p in set(xmls) if os.path.basename(p) != "initial.xml")
+    mats = sorted(set(mats))
     return {"svg": svg, "xml": xmls, "mat": mats}
 
 
@@ -56,6 +69,15 @@ def leer_output_xml_info(xml_path):
 
 def resumen_resultados(output_dir):
     fr = listar_frames(output_dir)
+    if not (fr["svg"] or fr["xml"] or fr["mat"]):
+        # Carpeta de experimento: sumar las replicas (exp_N/replica_i/output)
+        svg, xmls, mats = [], [], []
+        for sub in sorted(glob.glob(os.path.join(output_dir or "", "replica_*"))):
+            f = listar_frames(sub)
+            svg += f["svg"]
+            xmls += f["xml"]
+            mats += f["mat"]
+        fr = {"svg": svg, "xml": xmls, "mat": mats}
     info = {"n_svg": len(fr["svg"]), "n_xml": len(fr["xml"]), "n_mat": len(fr["mat"])}
     if fr["svg"]:
         info["primero_svg"] = leer_svg_info(fr["svg"][0])

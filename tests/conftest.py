@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS runs (
     output_dir TEXT,
     escenario_id INTEGER,
     configuracion_id INTEGER,
+    error_message TEXT,
     FOREIGN KEY (experiment_id) REFERENCES experiments(id)
 );
 CREATE TABLE IF NOT EXISTS escenarios (

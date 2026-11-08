@@ -42,7 +42,7 @@ class PaginaLogin(PaginaBase):
         tlay.setSpacing(ESPACIO_M)
 
         # Título
-        titulo = QLabel("PhysiCell Lab")
+        titulo = QLabel("PhysiCell Manager")
         titulo.setObjectName("H1")
         titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tlay.addWidget(titulo)

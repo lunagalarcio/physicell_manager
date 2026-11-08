@@ -40,7 +40,7 @@ Todos los datos del usuario se persisten en una base de datos SQLite ubicada en 
 - Creacion, edicion y eliminacion de tarjetas de experimento con titulo, descripcion y etiquetas (tags).
 - Asociacion de un archivo `PhysiCell_settings.xml` a cada experimento.
 - Asociacion de la ruta al binario del motor (`binary_path`) para ejecutar simulaciones por experimento.
-- Control de versiones implicito mediante fecha de creacion y fecha de ultima modificacion.
+- Control de versiones con historial de configuraciones: registrar nuevas versiones del XML (con copia de resguardo), activar/restaurar versiones anteriores y validar el historial por experimento.
 
 ### Configuración y validación XML
 - Importacion y lectura de archivos XML de configuracion de PhysiCell.
@@ -68,6 +68,7 @@ Todos los datos del usuario se persisten en una base de datos SQLite ubicada en 
 ### Comparación
 - Vistas paralelas sincronizadas entre replicas.
 - Grafica de celulas finales por replica para analisis comparativo.
+- Prueba t de Student entre dos experimentos sobre metricas de réplicas (n.º de células finales), con exportacion de resultados a CSV.
 
 ### Preferencias y regresión
 - Configuracion de rutas por defecto y ruta al binario PhysiCell.
@@ -84,6 +85,8 @@ La aplicacion esta organizada en capas dentro del paquete `app/`:
 - `motor_physicell.py`: ejecucion cancelable del binario `project.exe`.
 - `xml_validator.py`: validacion estructural flexible de archivos XML.
 - `config_manager.py`: importacion, lectura y guardado de archivos XML.
+- `estadistica.py`: metricas por replica y pruebas t de Student entre experimentos.
+- `servicios.py`: capa de servicios que coordina nucleo, simulador, motor y estadistica.
 - `visualizador.py`: visor 2D basico.
 - `comparacion.py`: vistas paralelas y grafica final de celulas.
 - `reportes.py`: informes HTML y PDF con trazabilidad.
@@ -95,12 +98,14 @@ La aplicacion esta organizada en capas dentro del paquete `app/`:
 - `paginas/`: paginas de interfaz de usuario, una por seccion de la aplicacion.
 - `legacy/`: codigo legacy archivado.
 
-El modelo de datos relacional se basa en tres entidades principales:
+El modelo de datos relacional se basa en los siguientes entidades:
 
 ```
 USUARIO 1:N EXPERIMENTO
-EXPERIMENTO 1:N EJECUCION
+EXPERIMENTO 1:N CONFIGURACION
 EXPERIMENTO 1:N ESCENARIO
+EXPERIMENTO 1:N EJECUCION
+ESCENARIO 1:N EJECUCION (via escenario_id)
 ```
 
 ### Tablas de la base de datos
@@ -131,8 +136,18 @@ EXPERIMENTO 1:N ESCENARIO
 - `config_xml_path` (texto)
 - `parametros_json` (texto, valor por defecto '{}')
 - `created_at` (fecha y hora)
+- `configuracion_id` (clave foranea opcional hacia configuraciones)
 
-Las claves foraneas garantizan la integridad referencial entre experimentos, ejecuciones y escenarios.
+**configuraciones**
+- `id` (clave primaria)
+- `experiment_id` (clave foranea hacia experimentos)
+- `nombre` (texto, no nulo)
+- `xml_path` (texto)
+- `version` (entero, version numerica del XML)
+- `es_activa` (booleano, una unica configuracion activa por experimento)
+- `creado_en` (fecha y hora)
+
+Las claves foraneas garantizan la integridad referencial entre experimentos, configuraciones, escenarios y ejecuciones.
 
 ---
 
@@ -286,6 +301,7 @@ physicell_experimentos/
 │  ├─ test_comparacion.py
 │  ├─ test_reportes.py
 │  ├─ test_visores.py
+│  ├─ test_versionado_configuraciones.py
 │  └─ test_regresion.py    # Suite de pruebas (ejecutable directamente)
 ├─ pytest.ini              # Configuracion de pytest
 ├─ .github/
@@ -345,6 +361,8 @@ Las pruebas cubren:
 - comparacion de ejecuciones
 - generacion de reportes
 - visores 2D y 3D
+- versionado y restauracion de configuraciones
+- estadisticas y prueba t de Student
 - suite de regresion
 
 ---
