@@ -9,7 +9,7 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 from collections import deque
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget, QDialog
 from PyQt6.QtCore import Qt
 import matplotlib
 matplotlib.use("QtAgg")
@@ -262,6 +262,32 @@ def detectar_fila_nrad(m, ncols):
     return None
 
 
+class DialogoInfoTipos(QDialog):
+    """Ventana con el diseño de la leyenda/info de tipos de la visualizacion 2D."""
+
+    def __init__(self, legend_text="", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Info de tipos — Visualización")
+        self.setMinimumSize(420, 300)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 14, 14, 14)
+        lay.setSpacing(10)
+        t = QLabel("<b>Leyenda / Info de tipos</b>")
+        t.setWordWrap(True)
+        lay.addWidget(t)
+        self.lbl = QLabel(legend_text or "Sin datos.")
+        self.lbl.setWordWrap(True)
+        self.lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.lbl, 1)
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        b = QPushButton("Cerrar")
+        b.setObjectName("Primary")
+        b.clicked.connect(self.accept)
+        btns.addWidget(b)
+        lay.addLayout(btns)
+
+
 class VisorPhysiCell(QWidget):
     def __init__(self, output_dir="", parent=None):
         super().__init__(parent)
@@ -313,6 +339,10 @@ class VisorPhysiCell(QWidget):
         top.addWidget(self.chk_att)
         top.addWidget(self.cmb_color2d)
         top.addWidget(self.btn_vtk)
+        self.btn_info_tipos = QPushButton("Info tipos")
+        self.btn_info_tipos.setToolTip("Ventana con la info/leyenda de tipos de la visualizacion")
+        self.btn_info_tipos.clicked.connect(self._abrir_info_tipos)
+        top.addWidget(self.btn_info_tipos)
         lay.addLayout(top)
         filt = QHBoxLayout()
         filt.addWidget(QLabel("Tipo:"))
@@ -423,6 +453,12 @@ class VisorPhysiCell(QWidget):
         if actual in tipos or actual == "Todos":
             self.cmb_tipo.setCurrentText(actual)
         self.cmb_tipo.blockSignals(False)
+
+    def _abrir_info_tipos(self):
+        """Abre la ventana con la info/leyenda de tipos de la visualizacion."""
+        from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
+        dlg = DialogoInfoTipos(self.lbl_leyenda.text() if hasattr(self, "lbl_leyenda") else "", parent=self)
+        dlg.exec()
 
     def _velocidad(self, txt):
         ms = {"0.5x": 1600, "1x": 800, "2x": 400, "4x": 200}.get(txt, 800)
