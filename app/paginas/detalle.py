@@ -1015,28 +1015,6 @@ class PaginaDetalle(PaginaBase):
         v.addWidget(self.visor, 1)
         self.vis_mode.currentTextChanged.connect(self._vis_modo)
         self._vis_cargar()
-
-        # ---------- Sección: videos generados ----------
-        vv = QVBoxLayout()
-        vv.addWidget(QLabel("<b>Videos generados para este experimento</b>"))
-        self.tbl_videos = QTableWidget()
-        self.tbl_videos.setColumnCount(6)
-        self.tbl_videos.setHorizontalHeaderLabels(["Run", "Tipo", "FPS", "Frames", "Archivo", "Creado"])
-        self.tbl_videos.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.tbl_videos.setMaximumHeight(120)
-        vv.addWidget(self.tbl_videos)
-        row_v = QHBoxLayout()
-        b_ref_v = QPushButton("Actualizar lista")
-        b_ref_v.setObjectName("Secondary")
-        b_ref_v.clicked.connect(self._refrescar_videos)
-        row_v.addWidget(b_ref_v)
-        row_v.addStretch()
-        cvv = QFrame()
-        cvv.setLayout(row_v)
-        vv.addWidget(cvv)
-        v.addLayout(vv)
-
-        self._refrescar_videos()
         return w
 
     def _abrir_vtk_detalle(self):
@@ -1053,20 +1031,6 @@ class PaginaDetalle(PaginaBase):
         conn.close()
         titulo = r[1] if r else ""
         abrir_vtk(self.lw, d or "", titulo=f"Tumor 3D — {titulo or self.current_experiment_id}")
-
-    def _refrescar_videos(self):
-        from ..nucleo import listar_videos, get_db_path
-        conn = sqlite3.connect(get_db_path())
-        rows = listar_videos(conn, self.current_experiment_id)
-        conn.close()
-        self.tbl_videos.setRowCount(len(rows))
-        for i, (vid, run_num, tipo, ruta, fps, frames, creado) in enumerate(rows):
-            self.tbl_videos.setItem(i, 0, QTableWidgetItem(str(run_num)))
-            self.tbl_videos.setItem(i, 1, QTableWidgetItem(tipo))
-            self.tbl_videos.setItem(i, 2, QTableWidgetItem(str(fps)))
-            self.tbl_videos.setItem(i, 3, QTableWidgetItem(str(frames)))
-            self.tbl_videos.setItem(i, 4, QTableWidgetItem(ruta or ""))
-            self.tbl_videos.setItem(i, 5, QTableWidgetItem(str(creado) if creado else ""))
 
     def _generar_video(self, tipo: str):
         eid = self.current_experiment_id
@@ -1110,7 +1074,6 @@ class PaginaDetalle(PaginaBase):
             registrar_video(conn2, eid, run_num, tipo=tipo, ruta_archivo=salida, fps=fps, frames=r.get("frames", 0))
             conn2.close()
             self.run_log.append(f"Video {tipo.upper()} generado: {salida} ({r.get('frames', 0)} frames)")
-            self._refrescar_videos()
             QMessageBox.information(self.lw, "Video", f"Video {tipo.upper()} generado:\n{salida}")
         else:
             self.run_log.append(f"Error video {tipo.upper()}: {r.get('error')}")
