@@ -492,7 +492,12 @@ class VisorPhysiCell(QWidget):
             v = 0
         self.slider.setValue(v)
 
-    def _ir(self, v):
+    def _on_slider_nav(self, v):
+        # Debounce: cada cambio reinicia el timer single-shot; dibuja en el timeout
+        self._timer_nav.stop()
+        self._timer_nav.start()
+
+    def _on_slider_nav_timeout(self):
         self._dibujar()
 
     def _datos_frame(self, idx):
