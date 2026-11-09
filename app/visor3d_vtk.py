@@ -423,6 +423,8 @@ class DialogoVTK(QDialog):
         self.cmb_var.setVisible(self.modo == "variable")
         if txt in ("presión", "volumen"):
             self.cmb_var.setCurrentText(txt)
+        # Cada cambio de modo reajusta la vista para que framing sea consistente
+        self._cam_init = False
         self.refrescar()
 
     def _color(self, clave):
