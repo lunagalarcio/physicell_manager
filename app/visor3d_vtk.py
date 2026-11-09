@@ -989,12 +989,12 @@ class DialogoVTK(QDialog):
         html_parts = []
         for t in L:
             s = str(t)
-            if s.startswith("Color tipo:"):
-                col_v = s.split("Color tipo:", 1)[1].strip()
+            if "Color visual" in s:
+                col_v = s.split("Color visual:", 1)[1].strip()
                 html_parts.append(f'<p><span style="color:{col_v};font-weight:bold;">{_he(str(tsel))}</span></p>')
             else:
                 html_parts.append(f"<p>{_he(s)}</p>")
-        if any(str(t).startswith("Color tipo:") for t in L):
+        if any("Color visual" in str(t) for t in L):
             # modo "tipo": el nombre del tipo se muestra en su color visual
             self.info.setHtml("".join(html_parts))
         else:
