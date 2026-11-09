@@ -10,7 +10,7 @@ import glob
 import xml.etree.ElementTree as ET
 from collections import deque
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget, QDialog
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
 import matplotlib
 matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -262,6 +262,34 @@ def detectar_fila_nrad(m, ncols):
     return None
 
 
+class WorkerCargar(QObject):
+    """Worker off-thread: lista snapshots, lee bounds y recolecta tipos (sin tocar GUI)."""
+    resultado = pyqtSignal(object)
+    error = pyqtSignal(str)
+
+    def __init__(self, dir_path, parent=None):
+        super().__init__(parent)
+        self.dir_path = dir_path or ""
+
+    def run(self):
+        try:
+            snaps = listar_snapshots(self.dir_path)
+            bounds = leer_bounds(self.dir_path)
+            tipos = set()
+            for p in snaps[:10]:
+                try:
+                    r = parse_snapshot_svg(p, bounds)
+                    if r.get("ok"):
+                        for t in list(r.get("types") or []):
+                            if t:
+                                tipos.add(str(t))
+                except Exception:
+                    pass
+            self.resultado.emit({"ok": True, "snaps": snaps, "bounds": bounds, "tipos": sorted(tipos)})
+        except Exception as e:
+            self.error.emit(f"Error al cargar frames: {e}")
+
+
 class DialogoInfoTipos(QDialog):
     """Ventana con el diseño de la leyenda/info de tipos de la visualizacion 2D."""
 
@@ -293,6 +321,7 @@ class VisorPhysiCell(QWidget):
         super().__init__(parent)
         self.snaps = []
         self.bounds = None
+        self._cargando = False
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
@@ -406,7 +435,10 @@ class VisorPhysiCell(QWidget):
         self._timer_nav = QTimer(self)
         self._timer_nav.setSingleShot(True)
         self._timer_nav.timeout.connect(self._on_slider_nav_timeout)
-        self.dir_edit.textChanged.connect(self._recargar)
+        self._timer_dir = QTimer(self)
+        self._timer_dir.setSingleShot(True)
+        self._timer_dir.timeout.connect(self._recargar)
+        self.dir_edit.textChanged.connect(self._on_dir_changed)
         self.chk_sub.stateChanged.connect(lambda _: self._dibujar())
         self.chk_edge.stateChanged.connect(lambda _: self._dibujar())
         self.chk_vec.stateChanged.connect(lambda _: self._dibujar())
@@ -428,13 +460,51 @@ class VisorPhysiCell(QWidget):
                   titulo=f"Tumor 3D — {len(self.snaps)} frames")
 
     def _recargar(self):
-        self.snaps = listar_snapshots(self.dir_edit.text().strip())
-        self.bounds = leer_bounds(self.dir_edit.text().strip())
+        d = self.dir_edit.text().strip()
+        if getattr(self, "_cargando", False):
+            return
+        self._cargando = True
+        self._tl = QThread(self)
+        self._worker = WorkerCargar(d)
+        self._worker.moveToThread(self._tl)
+        self._tl.started.connect(self._worker.run)
+        self._worker.resultado.connect(self._on_carga_resultado)
+        self._worker.error.connect(self._on_carga_error)
+        self._tl.finished.connect(self._tl.deleteLater)
+        self._tl.start()
+
+    def _on_carga_resultado(self, payload):
+        self._cargando = False
+        snaps = payload.get("snaps") or []
+        self.snaps = snaps
+        self.bounds = payload.get("bounds")
+        self.slider.blockSignals(True)
         self.slider.setMinimum(0)
-        self.slider.setMaximum(max(0, len(self.snaps) - 1))
+        self.slider.setMaximum(max(0, len(snaps) - 1))
         self.slider.setValue(0)
+        self.slider.blockSignals(False)
         self._cargar_tipos()
         self._dibujar()
+
+    def _on_carga_error(self, msg):
+        self._cargando = False
+        self.snaps = []
+        self.bounds = None
+        self.slider.blockSignals(True)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(0)
+        self.slider.setValue(0)
+        self.slider.blockSignals(False)
+        self.cmb_tipo.blockSignals(True)
+        self.cmb_tipo.clear()
+        self.cmb_tipo.addItem("Todos")
+        self.cmb_tipo.blockSignals(False)
+        self.lbl.setText(f"Error al cargar frames: {msg}")
+        self.lbl_leyenda.setText("")
+        self.ax2.set_title("2D estilo Studio - error al cargar")
+        self.ax3.set_title("3D - error al cargar")
+        self.canvas2.draw()
+        self.canvas3.draw()
 
     def _cargar_tipos(self):
         tipos = set()
@@ -499,6 +569,10 @@ class VisorPhysiCell(QWidget):
 
     def _on_slider_nav_timeout(self):
         self._dibujar()
+
+    def _on_dir_changed(self):
+        # Debounce: espera a que el usuario termine de escribir la ruta antes de recargar
+        self._timer_dir.start()
 
     def _datos_frame(self, idx):
         """Datos filtrados del frame para dibujo 2D/3D y VTK. Retorna dict o None."""

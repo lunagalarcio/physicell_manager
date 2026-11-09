@@ -985,7 +985,7 @@ class PaginaDetalle(PaginaBase):
         b_ref.clicked.connect(self._vis_cargar)
         b_rst = QPushButton("Restablecer vista")
         b_rst.setObjectName("Secondary")
-        b_rst.clicked.connect(lambda: self.visor._recargar() if hasattr(self, "visor") else None)
+        b_rst.clicked.connect(lambda: self.visor._dibujar() if hasattr(self, "visor") else None)
         b_vtk = QPushButton("Tumor 3D (PyVista/VTK)")
         b_vtk.setObjectName("Primary")
         b_vtk.setToolTip("Abrir esferas 3D interactivas: rotar, zoom, seleccionar células y ver oxígeno")
