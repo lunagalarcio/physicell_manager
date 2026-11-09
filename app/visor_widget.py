@@ -350,6 +350,10 @@ class VisorPhysiCell(QWidget):
         self.btn_play.setToolTip("Animar frames automáticamente")
         self.btn_play.clicked.connect(self._toggle_play)
         bot.addWidget(self.btn_play)
+        self.btn_reset = QPushButton("Restablecer vista")
+        self.btn_reset.setToolTip("Re-dibuja el frame actual con la vista por defecto")
+        self.btn_reset.clicked.connect(self._dibujar)
+        bot.addWidget(self.btn_reset)
         lay.addLayout(bot)
         from PyQt6.QtCore import QTimer
         self._timer = QTimer(self)
