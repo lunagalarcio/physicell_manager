@@ -328,7 +328,11 @@ class VisorPhysiCell(QWidget):
         self.lbl_leyenda = QLabel("")
         self.lbl_leyenda.setWordWrap(True)
         lay.addWidget(self.lbl_leyenda)
-        # ---- pestañas 2D y 3D separadas ----
+        # ---- pestañas 2D y 3D separadas (leyenda a la izquierda del bloque) ----
+        left_col = QWidget()
+        left_lay = QVBoxLayout(left_col)
+        left_lay.addWidget(self.lbl_leyenda)
+        left_lay.addStretch()
         self.tabs_vis = QTabWidget()
         self.fig2 = Figure(figsize=(8, 5))
         self.ax2 = self.fig2.add_subplot(111)
@@ -339,7 +343,10 @@ class VisorPhysiCell(QWidget):
         self.tabs_vis.addTab(self.canvas2, "2D")
         self.tabs_vis.addTab(self.canvas3, "3D")
         self._cbar = None
-        lay.addWidget(self.tabs_vis, 1)
+        hsplit = QHBoxLayout()
+        hsplit.addWidget(left_col)
+        hsplit.addWidget(self.tabs_vis, 1)
+        lay.addLayout(hsplit)
         bot = QHBoxLayout()
         self.btn_prev = QPushButton("<")
         self.btn_prev.setFixedWidth(40)
