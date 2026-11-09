@@ -287,6 +287,12 @@ class VisorPhysiCell(QWidget):
         self.chk_att = QCheckBox("uniones")
         self.chk_att.setChecked(True)
         self.chk_att.setToolTip("Líneas rojas de attached/spring como Studio")
+        from PyQt6.QtWidgets import QComboBox
+        self.cmb_color2d = QComboBox()
+        self.cmb_color2d.addItems(["Estado", "Tipo"])
+        self.cmb_color2d.setCurrentText("Estado")
+        self.cmb_color2d.setToolTip("Colorear la grafica 2D por estado o por tipo celular")
+        self.cmb_color2d.currentTextChanged.connect(lambda _: self._dibujar())
         self.btn_vtk = QPushButton("3D VTK")
         self.btn_vtk.setToolTip("Abrir esferas 3D interactivas con PyVista/VTK")
         self.btn_vtk.clicked.connect(self._abrir_vtk)
@@ -305,6 +311,7 @@ class VisorPhysiCell(QWidget):
         top.addWidget(self.chk_edge)
         top.addWidget(self.chk_vec)
         top.addWidget(self.chk_att)
+        top.addWidget(self.cmb_color2d)
         top.addWidget(self.btn_vtk)
         lay.addLayout(top)
         filt = QHBoxLayout()
@@ -508,6 +515,18 @@ class VisorPhysiCell(QWidget):
         idx = d["idx"]
         x, y, rv, rgba = d["x"], d["y"], d["rv"], d["rgba"]
         tipos, vec, att, spr = d["tipos"], d["vec"], d["att"], d["spr"]
+        # Coloreo 2D: por estado (default, rgba del SVG) o por tipo celular (paleta)
+        modo2d = self.cmb_color2d.currentText() if hasattr(self, "cmb_color2d") else "Estado"
+        if modo2d == "Tipo" and len(x):
+            grupos = {}
+            for i, t in enumerate(tipos):
+                tt = str(t) if t else "desconocido"
+                grupos.setdefault(tt, []).append(i)
+            paleta = ["#38BDF8", "#F472B6", "#FBBF24", "#A78BFA", "#34D399", "#FB7185"]
+            colmap = {tt: paleta[k % len(paleta)] for k, tt in enumerate(sorted(grupos, key=str))}
+            colors = [colmap[str(tipos[i]) if tipos[i] else "desconocido"] for i in range(len(x))]
+        else:
+            colors = rgba
         # fondo substrato estilo Studio con barra de color
         if self.chk_sub.isChecked():
             sub = cargar_substrato(self.dir_edit.text().strip(), idx)
@@ -534,7 +553,7 @@ class VisorPhysiCell(QWidget):
             sa = segs(att | spr)
             if sa:
                 self.ax2.add_collection(LineCollection(sa, colors="red", linewidths=0.9, alpha=0.9))
-            dibujar_circulos(self.ax2, x, y, rv, rgba, edge=self.chk_edge.isChecked())
+            dibujar_circulos(self.ax2, x, y, rv, colors, edge=self.chk_edge.isChecked())
         if self.bounds:
             self.ax2.set_xlim(self.bounds["xmin"], self.bounds["xmax"])
             self.ax2.set_ylim(self.bounds["ymin"], self.bounds["ymax"])
