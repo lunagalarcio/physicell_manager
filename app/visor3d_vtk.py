@@ -232,7 +232,7 @@ class DialogoVTK(QDialog):
         sl.addWidget(QLabel("<b>Célula seleccionada</b>"))
         self.info = QTextEdit()
         self.info.setReadOnly(True)
-        self.info.setMinimumHeight(500)
+        self.info.setMinimumHeight(240)
         self.info.setStyleSheet("""
             font-family: Consolas, monospace;
             font-size: 12px;
@@ -283,12 +283,15 @@ class DialogoVTK(QDialog):
         self.cmb_vel.currentTextChanged.connect(self._vel)
         b_reset = QPushButton("Restablecer vista")
         b_reset.clicked.connect(self._reset)
+        b_reset_panel = QPushButton("Restablecer panel")
+        b_reset_panel.clicked.connect(self._reset_panel)
         bot.addWidget(self.btn_prev)
         bot.addWidget(self.slider, 1)
         bot.addWidget(self.btn_next)
         bot.addWidget(self.btn_play)
         bot.addWidget(self.cmb_vel)
         bot.addWidget(b_reset)
+        bot.addWidget(b_reset_panel)
         cb = QWidget()
         cb.setLayout(bot)
         cl.addWidget(cb)
@@ -355,6 +358,31 @@ class DialogoVTK(QDialog):
     def _reset(self):
         self._cam_init = False
         self._encuadrar()
+
+    def _reset_panel(self):
+        """Restablece modo de color, capas y selección (manteniendo la vista)."""
+        self.modo = "estado"
+        try:
+            self.cmb_modo.blockSignals(True)
+            self.cmb_modo.setCurrentText("estado")
+            self.cmb_modo.blockSignals(False)
+        except Exception:
+            pass
+        try:
+            self.cmb_var.setVisible(False)
+        except Exception:
+            pass
+        try:
+            self.chk_nuc.setChecked(True)
+            self.chk_vec.setChecked(True)
+            self.chk_att.setChecked(True)
+            self.chk_sub.setChecked(False)
+            self.chk_org.setChecked(False)
+        except Exception:
+            pass
+        self._limpiar_sel(mensaje=False)
+        self.refrescar()
+        self._reset()
 
     def _res_esferas(self, n):
         """Resolución adaptativa: detalle alto con pocas células, ligera con miles."""
