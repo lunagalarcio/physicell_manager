@@ -961,7 +961,7 @@ class DialogoVTK(QDialog):
                 tset = sorted(set(str(t) for t in (d.get("tipos") or []) if t), key=str) or ["default"]
                 if tsel in tset:
                     k = tset.index(tsel)
-                    L.append(f"Color tipo: {PALETA_TIPOS[k % len(PALETA_TIPOS)]}")
+                    L.append(f"Tipo: {tsel} — Color visual: {PALETA_TIPOS[k % len(PALETA_TIPOS)]}")
             except Exception:
                 pass
         L.append(f"Frame: {d.get('idx', 0)+1}/{d.get('n_snaps', '?')} — {d.get('time', '')}")
