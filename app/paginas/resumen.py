@@ -168,12 +168,12 @@ class PaginaResumen(PaginaBase):
             if q and q not in f"{title} {desc} {tags}".lower():
                 continue
 
-            # Estadísticas de ejecuciones
-            total_runs = r[6] if len(r) > 6 else 0
-            completadas = r[7] if len(r) > 7 else 0
-            en_curso = r[8] if len(r) > 8 else 0
-            falladas = r[9] if len(r) > 9 else 0
-            ultima_fecha = r[10] if len(r) > 10 else None
+            # Estadísticas de ejecuciones (mismos índices que la página Experimentos)
+            total_runs = r[9] if len(r) > 9 else 0
+            completadas = r[10] if len(r) > 10 else 0
+            en_curso = r[11] if len(r) > 11 else 0
+            falladas = r[12] if len(r) > 12 else 0
+            ultima_fecha = r[13] if len(r) > 13 else None
 
             # Estado del XML
             xe_label, xe_clave = xml_estado(cfg)
