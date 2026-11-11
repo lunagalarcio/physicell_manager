@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from .base import (
     PaginaBase, Seccion, Tarjeta, xml_estado, ESPACIO_M,
     ExperimentoCard, estadisticas_experimento, estado_general_experimento,
+    fijar_tamanos_simultaneos,
 )
 from .. import simulador as SIM
 from .. import servicios as SERV
@@ -124,17 +125,7 @@ class PaginaExperimentos(PaginaBase):
                 fila += 1
 
         # Igualar el tamaño de todas las tarjetas del grid (mismo ancho y altura)
-        if cards:
-            altos = []
-            anchos = []
-            for c in cards:
-                c.layout().activate()
-                altos.append(int(c.sizeHint().height()))
-                anchos.append(int(c.maximumWidth()))
-            alto = max(altos) if altos else 320
-            ancho = max(anchos) if anchos else 360
-            for c in cards:
-                c.setFixedSize(int(ancho), int(max(alto, int(c.minimumSizeHint().height()))))
+        fijar_tamanos_simultaneos(cards)
 
     def _acciones_exp(self, eid):
         m = QMenu(self.lw)

@@ -12,6 +12,7 @@ from .base import (
     PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, ESTILO_ESTADO,
     exp_estado, ESPACIO_M, ESPACIO_L, ESPACIO_XS, ESPACIO_S, TAM_H2,
     ExperimentoCard, estadisticas_experimento, estado_general_experimento,
+    fijar_tamanos_simultaneos,
 )
 from .. import simulador as SIM
 from .. import servicios as SERV
@@ -155,6 +156,7 @@ class PaginaResumen(PaginaBase):
 
         col = fila = 0
         mostrados = 0
+        cards = []
         for r in filas:
             eid = r[0]
             title = r[1]
@@ -203,12 +205,15 @@ class PaginaResumen(PaginaBase):
                 on_abrir=self.lw.abrir_detalle,
                 on_acciones=self._acciones_exp,
             )
+            cards.append(card)
             self.grid.addWidget(card, fila, col)
             col += 1
             if col > 2:
                 col = 0
                 fila += 1
             mostrados += 1
+        # Igualar el tamaño de todas las tarjetas (mismo ancho y altura)
+        fijar_tamanos_simultaneos(cards)
         if mostrados == 0:
             vazio = QLabel("Sin experimentos. Usa «+ Nuevo experimento» para empezar.")
             vazio.setObjectName("Muted")

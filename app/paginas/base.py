@@ -228,6 +228,23 @@ class Tarjeta(QFrame):
         return self._lay
 
 
+def fijar_tamanos_simultaneos(widgets, ancho=None, alto=None):
+    """Fija el mismo tamaño (ancho y altura) para todos los widgets del lote.
+
+    Se usa con las tarjetas de experimentos para que todas queden del mismo
+    tamaño dentro del grid, sin importar el contenido de cada una.
+    """
+    if not widgets:
+        return
+    if ancho is None or alto is None:
+        anchos = [int(w.sizeHint().width()) for w in widgets]
+        altos = [int(w.sizeHint().height()) for w in widgets]
+        ancho = max(anchos) if ancho is None else ancho
+        alto = max(altos) if alto is None else alto
+    for w in widgets:
+        w.setFixedSize(int(ancho), int(max(alto, int(w.minimumSizeHint().height()))))
+
+
 class BadgeEstado(QLabel):
     """Etiqueta de estado con color consistente."""
 
