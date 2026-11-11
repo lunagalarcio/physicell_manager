@@ -64,6 +64,7 @@ class PaginaExperimentos(PaginaBase):
             tandas = {}
 
         col = fila = 0
+        cards = []
         for r in filas:
             eid = r[0]
             title = r[1]
@@ -115,11 +116,25 @@ class PaginaExperimentos(PaginaBase):
                 on_abrir=self.lw.abrir_detalle,
                 on_acciones=self._acciones_exp,
             )
+            cards.append(card)
             self.grid.addWidget(card, fila, col)
             col += 1
             if col > 2:
                 col = 0
                 fila += 1
+
+        # Igualar el tamaño de todas las tarjetas del grid (mismo ancho y altura)
+        if cards:
+            altos = []
+            anchos = []
+            for c in cards:
+                c.layout().activate()
+                altos.append(int(c.sizeHint().height()))
+                anchos.append(int(c.maximumWidth()))
+            alto = max(altos) if altos else 320
+            ancho = max(anchos) if anchos else 360
+            for c in cards:
+                c.setFixedSize(int(ancho), int(max(alto, int(c.minimumSizeHint().height()))))
 
     def _acciones_exp(self, eid):
         m = QMenu(self.lw)
