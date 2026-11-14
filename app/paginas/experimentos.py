@@ -127,6 +127,11 @@ class PaginaExperimentos(PaginaBase):
         # Igualar el tamaño de todas las tarjetas del grid (mismo ancho y altura)
         fijar_tamanos_simultaneos(cards)
 
+        if not cards:
+            vacio = QLabel("Sin experimentos. Usa «+ Nuevo experimento» para empezar.")
+            vacio.setObjectName("Muted")
+            self.grid.addWidget(vacio, 0, 0)
+
     def _acciones_exp(self, eid):
         m = QMenu(self.lw)
         m.addAction("Editar datos", lambda: self._editar_meta(eid))

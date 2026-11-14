@@ -221,7 +221,7 @@ class LabWindow(QMainWindow):
         sub.setWordWrap(True)
         lay.addWidget(sub)
 
-        from .. import simulador as SIM
+        from . import simulador as SIM
         from .nucleo import get_db_path
         conn = sqlite3.connect(get_db_path())
 

@@ -8,6 +8,7 @@ import os
 import sys
 import sqlite3
 import hashlib
+import json
 import secrets
 import traceback
 from datetime import datetime
@@ -306,6 +307,34 @@ def get_db_path():
     data_dir = get_user_data_dir()
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, "experiments.db")
+
+
+# ---------- Preferencias de la aplicacion ----------
+
+PREFS_ARCHIVO = "engine_preferences.json"
+
+
+def prefs_path():
+    """Ruta del archivo JSON con las preferencias de la aplicacion."""
+    return os.path.join(get_user_data_dir(), PREFS_ARCHIVO)
+
+
+def cargar_preferencias():
+    """Carga las preferencias persistidas. Devuelve un dict vacío si no existen."""
+    try:
+        with open(prefs_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def guardar_preferencias(prefs):
+    """Persiste las preferencias de la aplicacion a disco."""
+    path = prefs_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(prefs, f, ensure_ascii=False)
 
 
 def init_database():

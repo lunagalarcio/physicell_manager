@@ -148,7 +148,7 @@ class PaginaResumen(PaginaBase):
 
         q = (self.search.text() or "").lower().strip()
         uid = self.lw.usuario_actual["id"] if self.lw.usuario_actual else None
-        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)[:12]
+        filas = SERV.listar_experimentos_servicio(self.db_path(), usuario_id=uid)
         try:
             tandas = SERV.ultimas_tandas_servicio(self.db_path())
         except Exception:
@@ -212,6 +212,11 @@ class PaginaResumen(PaginaBase):
                 col = 0
                 fila += 1
             mostrados += 1
+        # Limitar a las primeras coincidencias (tras aplicar el filtro de búsqueda)
+        while len(cards) > 12:
+            card = cards.pop()
+            self.grid.removeWidget(card)
+            card.deleteLater()
         # Igualar el tamaño de todas las tarjetas (mismo ancho y altura)
         fijar_tamanos_simultaneos(cards)
         if mostrados == 0:
