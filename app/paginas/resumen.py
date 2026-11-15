@@ -231,42 +231,10 @@ class PaginaResumen(PaginaBase):
         m.exec(self.lw.cursor().pos())
 
     def _editar_meta(self, eid):
-        from PyQt6.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
-        from .. import simulador as SIM
-        conn = self.conn()
-        row = SIM.obtener_experimento(conn, eid)
-        conn.close()
-        t, d, g = (row[1], row[2], row[3] or "") if row else ("", "", "")
-
-        dlg = QDialog(self.lw)
-        dlg.setWindowTitle("Editar experimento")
-        dlg.setMinimumWidth(420)
-        lay = QVBoxLayout(dlg)
-        form = QFormLayout()
-        e1, e2, e3 = QLineEdit(t), QLineEdit(d or ""), QLineEdit(g or "")
-        form.addRow("Título:", e1)
-        form.addRow("Descripción:", e2)
-        form.addRow("Etiquetas:", e3)
-        lay.addLayout(form)
-
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        btns.button(QDialogButtonBox.StandardButton.Ok).setText("Guardar")
-        btns.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
-        btns.button(QDialogButtonBox.StandardButton.Ok).setObjectName("Primary")
-        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
-        lay.addWidget(btns)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        if dlg.exec():
-            conn = self.conn()
-            SIM.actualizar_experimento(
-                conn, eid, e1.text().strip() or t, e2.text().strip(), e3.text().strip()
-            )
-            conn.close()
-            self.refrescar()
-            self.lw.refrescar_exps()
+        # Delegado a la página Experimentos: diálogo unificado con todos los
+        # campos (título, descripción, etiquetas, motor y archivos custom).
+        self.lw.ir("Experimentos")
+        self.lw.paginas["Experimentos"]._editar_meta(eid)
 
     def _eliminar_exp(self, eid):
         from PyQt6.QtWidgets import QMessageBox

@@ -186,6 +186,18 @@ class DialogoVTK(QDialog):
         t.setWordWrap(True)
         t.setStyleSheet("font-weight: bold; font-size: 14px;")
         sl.addWidget(t)
+        # ---- color de fondo del visualizador 3D ----
+        row_fondo = QHBoxLayout()
+        self.cmb_fondo = QComboBox()
+        self.cmb_fondo.addItems(["Oscuro", "Claro"])
+        self.cmb_fondo.setCurrentText("Oscuro")
+        self.cmb_fondo.setToolTip("Color de fondo del visualizador 3D")
+        row_fondo.addWidget(QLabel("Fondo:"))
+        row_fondo.addWidget(self.cmb_fondo)
+        cf = QWidget()
+        cf.setLayout(row_fondo)
+        sl.addWidget(cf)
+        self.cmb_fondo.currentTextChanged.connect(self._fondo)
         self.lbl_frame = QLabel("")
         self.lbl_frame.setWordWrap(True)
         sl.addWidget(self.lbl_frame)
@@ -229,6 +241,16 @@ class DialogoVTK(QDialog):
         for c in (self.chk_nuc, self.chk_vec, self.chk_att, self.chk_sub, self.chk_org):
             c.stateChanged.connect(lambda _: self.refrescar())
             sl.addWidget(c)
+        self.chk_dead = QCheckBox("Células muertas (apoptóticas/necroticas)")
+        self.chk_dead.setChecked(True)
+        self.chk_dead.setToolTip("Si está activo, las células muertas se ven en rojo/amarillo; si no, se omiten del render.")
+        self.chk_dead.stateChanged.connect(lambda _: self.refrescar())
+        sl.addWidget(self.chk_dead)
+        self.chk_final = QCheckBox("Al final: desaparecer / persistir")
+        self.chk_final.setChecked(False)
+        self.chk_final.setToolTip("Al llegar al último frame, las células muertas desaparecen; si no, persisten.")
+        self.chk_final.stateChanged.connect(lambda _: self.refrescar())
+        sl.addWidget(self.chk_final)
         sl.addWidget(QLabel("<b>Célula seleccionada</b>"))
         self.info = QTextEdit()
         self.info.setReadOnly(True)
@@ -334,6 +356,13 @@ class DialogoVTK(QDialog):
         self.slider.setValue(0)
         self.slider.blockSignals(False)
 
+    def _frame_final(self):
+        """True si el frame actual es el último de la animacion."""
+        try:
+            return bool(self.snaps) and self.slider is not None and self.slider.maximum() >= 0 and self.slider.value() >= self.slider.maximum()
+        except Exception:
+            return False
+
     def _mover(self, d):
         if self.snaps:
             self.slider.setValue(max(0, min(len(self.snaps) - 1, self.slider.value() + d)))
@@ -425,6 +454,14 @@ class DialogoVTK(QDialog):
             self.cmb_var.setCurrentText(txt)
         # El modo solo cambia la agrupación/colores: se re-renderiza manteniendo la vista
         self.refrescar()
+
+    def _fondo(self, texto):
+        """Cambia el color de fondo del visualizador 3D (PyVista/VTK)."""
+        try:
+            color = "#141414" if str(texto or "Oscuro") == "Oscuro" else "#F7F7F5"
+            self.plotter.set_background(color)
+        except Exception:
+            pass
 
     def _color(self, clave):
         from PyQt6.QtGui import QColor as _QC
@@ -522,7 +559,10 @@ class DialogoVTK(QDialog):
             grupo_ids = list(range(n))
             grupos.append(("var", grupo_ids, None))
         else:
-            for clave in ("viva", "apoptotica", "necrotica"):
+            claves = ("viva", "apoptotica", "necrotica") if self.chk_dead.isChecked() else ("viva",)
+            if self.chk_final.isChecked() and self._frame_final():
+                claves = ("viva",)
+            for clave in claves:
                 ids = [i for i in range(n) if est[i] == clave]
                 if ids:
                     grupos.append((clave, ids, self.colores[clave]))

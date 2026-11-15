@@ -222,7 +222,7 @@ class PaginaExperimentos(PaginaBase):
         form.addRow("Etiquetas:", t3)
         lay.addLayout(form)
 
-        hint = QLabel("Podrás asignar el XML en la pestaña Configuración del detalle.")
+        hint = QLabel("Podrás asignar el XML en la pestaña Ajustes del experimento del detalle.")
         hint.setObjectName("Muted")
         hint.setWordWrap(True)
         lay.addWidget(hint)

@@ -25,7 +25,7 @@ from .paginas.resumen import PaginaResumen
 from .paginas.experimentos import PaginaExperimentos
 from .paginas.configuraciones import PaginaConfiguraciones
 from .paginas.ejecuciones import PaginaEjecuciones
-from .paginas.resultados_global import PaginaResultados
+from .paginas.visualizacion_global import PaginaVisualizacion
 from .paginas.comparacion_global import PaginaComparacion
 from .paginas.reportes import PaginaReportes
 from .paginas.preferencias import PaginaPreferencias
@@ -94,8 +94,8 @@ class LabWindow(QMainWindow):
         self.nav_group.setExclusive(True)
         self.nav_btns = {}
         self._secciones = [
-            "Resumen", "Experimentos", "Configuraciones", "Ejecuciones",
-            "Resultados", "Comparación", "Reportes", "Ajustes",
+            "Resumen", "Experimentos", "Biblioteca de XML", "Ejecuciones",
+            "Visualización", "Comparación", "Reportes", "Ajustes",
         ]
         for i, name in enumerate(self._secciones):
             b = QPushButton(name)
@@ -129,9 +129,9 @@ class LabWindow(QMainWindow):
         for nombre, cls in [
             ("Resumen", PaginaResumen),
             ("Experimentos", PaginaExperimentos),
-            ("Configuraciones", PaginaConfiguraciones),
+            ("Biblioteca de XML", PaginaConfiguraciones),
             ("Ejecuciones", PaginaEjecuciones),
-            ("Resultados", PaginaResultados),
+            ("Visualización", PaginaVisualizacion),
             ("Comparación", PaginaComparacion),
             ("Reportes", PaginaReportes),
             ("Ajustes", PaginaPreferencias),
@@ -188,7 +188,44 @@ class LabWindow(QMainWindow):
         pagina = self.paginas.get(name)
         if pagina and hasattr(pagina, "refrescar"):
             pagina.refrescar()
+        self.actualizar_indicadores()
         self.stack.setCurrentIndex(idx)
+
+    def actualizar_indicadores(self):
+        """Actualiza el indicador del sidebar: experimentos en ejecución."""
+        try:
+            import sqlite3
+            from .nucleo import get_db_path
+            conn = sqlite3.connect(get_db_path(), timeout=5)
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(DISTINCT experiment_id) FROM runs "
+                    "WHERE status IN ('running', 'pending', 'registered')"
+                )
+                en_curso = cur.fetchone()[0] or 0
+            finally:
+                conn.close()
+            btn = self.nav_btns.get("Experimentos")
+            if btn is None:
+                return
+            texto = "Experimentos"
+            tooltip = "Ver experimentos"
+            if en_curso > 0:
+                texto += f"  ● {en_curso} en ejecución"
+                tooltip += f": {en_curso} experimento(s) con réplicas en curso"
+            btn.setText(texto)
+            btn.setToolTip(tooltip)
+        except Exception:
+            # El indicador es no bloqueante: ante error se mantiene el texto base
+            pass
+
+    def cambiar_tema(self, nombre):
+        """Cambia el tema visual de la ventana (claro/oscuro)."""
+        from .theme_lab import LAB_QSS, LAB_QSS_CLARO
+        qss = LAB_QSS_CLARO if str(nombre or "").lower().startswith("cl") else LAB_QSS
+        self.setStyleSheet(qss)
+        self._tema_actual = nombre
 
     def abrir_detalle(self, eid):
         self.current_experiment_id = eid

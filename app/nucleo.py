@@ -146,7 +146,7 @@ class ReplicaWorker(QThread):
                         motivo = (
                             "No hay binario de PhysiCell configurado para este experimento: "
                             "solo se generó la configuración.\n"
-                            "Asigna el ejecutable en la pestaña Configuración para poder simular."
+                            "Asigna el ejecutable en la pestaña Ajustes del experimento para poder simular."
                         )
                         _escribir_log_extra(log_path, motivo)
                         actualizar_run(conn, run_id, "registered", end=True,

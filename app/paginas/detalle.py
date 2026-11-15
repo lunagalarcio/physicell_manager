@@ -161,7 +161,7 @@ class PaginaDetalle(PaginaBase):
         self.tabs_widget = tabs
         lay.addWidget(tabs, 1)
         tabs.addTab(self._tab_resumen(eid, title, desc, tags, cfg, creado, modif, runs, n_esc, estado, col), "Resumen")
-        tabs.addTab(self._tab_config(eid, cfg, binp, cpp, h), "Configuración")
+        tabs.addTab(self._tab_config(eid, cfg, binp, cpp, h), "Ajustes del experimento")
         tabs.addTab(self._tab_ejecucion(eid, cfg), "Ejecuciones")
         tabs.addTab(self._tab_vis(eid), "Visualización 2D/3D")
         tabs.addTab(self._tab_resultados(eid), "Resultados")
@@ -225,7 +225,7 @@ class PaginaDetalle(PaginaBase):
         v.addWidget(info)
 
         grid = QGridLayout()
-        accesos = [("Configuración", 0), ("Ejecuciones", 2), ("Visualización 2D/3D", 3), ("Resultados", 4)]
+        accesos = [("Ajustes del experimento", 0), ("Ejecuciones", 2), ("Visualización 2D/3D", 3), ("Resultados", 4)]
         for i, (lbl, idx) in enumerate(accesos):
             b = QPushButton(lbl)
             b.setObjectName("Secondary")
@@ -238,7 +238,7 @@ class PaginaDetalle(PaginaBase):
         return w
 
     # =====================================================================
-    # Pestaña: Configuración
+    # Pestaña: Ajustes del experimento
     # =====================================================================
     def _tab_config(self, eid, cfg, binp="", cpp="", h=""):
         w = QFrame()
@@ -572,10 +572,10 @@ class PaginaDetalle(PaginaBase):
             custom_h_path=self.cfg_h.text().strip() if hasattr(self, "cfg_h") else "",
         )
         if not r.get("ok"):
-            QMessageBox.warning(self.lw, "Configuración", r.get("error", "Error al guardar"))
+            QMessageBox.warning(self.lw, "Ajustes del experimento", r.get("error", "Error al guardar"))
             return
         self.lw._last_exe = self.cfg_exe.text().strip() if hasattr(self, "cfg_exe") else ""
-        QMessageBox.information(self.lw, "Configuración", "Guardada en este experimento.")
+        QMessageBox.information(self.lw, "Ajustes del experimento", "Guardada en este experimento.")
         self.lw.refrescar_exps()
         self.lw.refrescar_resumen()
 
@@ -659,7 +659,7 @@ class PaginaDetalle(PaginaBase):
         escs = list(listar_escenarios(conn_e, eid))
         conn_e.close()
         if not escs:
-            l = QLabel("Sin escenarios. Créalos como variantes en la pestaña Configuración.")
+            l = QLabel("Sin escenarios. Créalos como variantes en la pestaña Ajustes del experimento.")
             l.setObjectName("Muted")
             l.setWordWrap(True)
             v.addWidget(l)
@@ -851,7 +851,7 @@ class PaginaDetalle(PaginaBase):
                 conn_e.close()
             cfg_id = ca[0] if ca else None
         if not (base or "").strip():
-            QMessageBox.warning(self.lw, "Ejecución", "Asigna el XML en la pestaña Configuración.")
+            QMessageBox.warning(self.lw, "Ejecución", "Asigna el XML en la pestaña Ajustes del experimento.")
             return
         v = validar_config(base)
         if not v.get("ok"):
@@ -882,7 +882,7 @@ class PaginaDetalle(PaginaBase):
         if not exe:
             QMessageBox.warning(
                 self.lw, "Ejecución",
-                "Configura la ruta del Motor PhysiCell (project.exe) en la pestaña Configuración."
+                "Configura la ruta del Motor PhysiCell (project.exe) en la pestaña Ajustes del experimento."
             )
             return
         from ..motor_physicell import verificar_binario

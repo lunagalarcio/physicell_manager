@@ -1,10 +1,10 @@
-"""Página de Ajustes: rutas del motor PhysiCell y suite de regresión."""
+"""Página de Ajustes: rutas del motor PhysiCell, cuenta y tema."""
 import os
 import subprocess as _sp
 import sys
 
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox, QWidget
+    QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox, QWidget, QComboBox
 )
 from PyQt6.QtCore import Qt
 
@@ -42,7 +42,7 @@ class PaginaPreferencias(PaginaBase):
         b_det = QPushButton("Detectar binario en la raíz")
         b_det.setObjectName("Secondary")
         b_det.clicked.connect(self._detectar_bin)
-        b_guardar = QPushButton("Guardar preferencias")
+        b_guardar = QPushButton("Guardar ajustes")
         b_guardar.setObjectName("Primary")
         b_guardar.clicked.connect(self._guardar)
         row_b = QHBoxLayout()
@@ -53,11 +53,31 @@ class PaginaPreferencias(PaginaBase):
         c.setLayout(row_b)
         tarjeta.add(c)
 
+        b_cuenta = QPushButton("Cambiar cuenta")
+        b_cuenta.setObjectName("Secondary")
+        b_cuenta.clicked.connect(self._cambiar_cuenta)
+        row_c = QHBoxLayout()
+        row_c.addWidget(b_cuenta)
+        row_c.addStretch()
+        cc = QWidget()
+        cc.setLayout(row_c)
+        tarjeta.add(cc)
+
         lay.addWidget(tarjeta)
+
+        # Apariencia
+        tarjeta_asp = Tarjeta()
+        tarjeta_asp.add(QLabel("Apariencia:"))
+        self.cmb_tema = QComboBox()
+        self.cmb_tema.addItems(["Oscuro", "Claro"])
+        self.cmb_tema.setCurrentText("Oscuro")
+        self.cmb_tema.currentTextChanged.connect(self._cambiar_tema)
+        tarjeta_asp.add(self.cmb_tema)
+        lay.addWidget(tarjeta_asp)
 
         info = QLabel(
             f"Datos por usuario: {get_db_path()}\n"
-            "Tema: oscuro PhysiCell Lab, coherente en tablas, formularios y gráficos.\n"
+            f"Tema: {self.cmb_tema.currentText() if hasattr(self, 'cmb_tema') else 'Oscuro'} PhysiCell Lab, coherente en tablas, formularios y gráficos.\n"
             "El motor PhysiCell es externo. La app solo genera XML, lanza el binario y organiza salidas."
         )
         info.setObjectName("Muted")
@@ -94,10 +114,10 @@ class PaginaPreferencias(PaginaBase):
             try:
                 guardar_preferencias(prefs)
             except Exception as e:
-                QMessageBox.warning(self, "Configuración", f"No se pudo guardar la preferencia: {e}")
-            QMessageBox.information(self, "Configuración", f"Binario: {b}")
+                QMessageBox.warning(self, "Ajustes", f"No se pudo guardar la preferencia: {e}")
+            QMessageBox.information(self, "Ajustes", f"Binario: {b}")
         else:
-            QMessageBox.warning(self, "Configuración", "No se encontró project.exe en la raíz indicada.")
+            QMessageBox.warning(self, "Ajustes", "No se encontró project.exe en la raíz indicada.")
 
     def _guardar(self):
         """Guarda las preferencias de motor (raíz y binario) en el archivo de datos."""
@@ -113,7 +133,16 @@ class PaginaPreferencias(PaginaBase):
             return
         if self.bin_edit.text().strip():
             self.lw._last_exe = self.bin_edit.text().strip()
-        QMessageBox.information(self, "Ajustes", "Preferencias guardadas correctamente.")
+        QMessageBox.information(self, "Ajustes", "Ajustes guardados correctamente.")
+
+    def _cambiar_tema(self, texto):
+        """Aplica el tema claro u oscuro seleccionado."""
+        nombre = "oscuro" if texto == "Oscuro" else "claro"
+        self.lw.cambiar_tema(nombre)
+
+    def _cambiar_cuenta(self):
+        """Cierra la sesión actual para poder iniciar con otra cuenta."""
+        self.lw.cerrar_sesion()
 
     def _ejecutar_tests(self):
         t = os.path.join(

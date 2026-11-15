@@ -9,7 +9,7 @@ import os
 import glob
 import xml.etree.ElementTree as ET
 from collections import deque
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget, QDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QLineEdit, QFileDialog, QCheckBox, QTabWidget, QDialog, QGroupBox, QComboBox
 from PyQt6.QtCore import Qt, QThread, QObject, pyqtSignal
 import matplotlib
 matplotlib.use("QtAgg")
@@ -324,7 +324,8 @@ class VisorPhysiCell(QWidget):
         self._cargando = False
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        top = QHBoxLayout()
+
+        # ---------- widgets de control (toolbar con grupos) ----------
         self.dir_edit = QLineEdit(output_dir)
         self.dir_edit.setPlaceholderText("Carpeta output PhysiCell (snapshot*.svg + initial.xml)")
         self.dir_edit.setToolTip("Como Studio: lee initial.xml para bounds y snapshot SVG para células con color y radio reales.")
@@ -342,7 +343,6 @@ class VisorPhysiCell(QWidget):
         self.chk_att = QCheckBox("uniones")
         self.chk_att.setChecked(True)
         self.chk_att.setToolTip("Líneas rojas de attached/spring como Studio")
-        from PyQt6.QtWidgets import QComboBox
         self.cmb_color2d = QComboBox()
         self.cmb_color2d.addItems(["Estado", "Tipo"])
         self.cmb_color2d.setCurrentText("Estado")
@@ -351,7 +351,9 @@ class VisorPhysiCell(QWidget):
         self.btn_vtk = QPushButton("3D VTK")
         self.btn_vtk.setToolTip("Abrir esferas 3D interactivas con PyVista/VTK")
         self.btn_vtk.clicked.connect(self._abrir_vtk)
-        from PyQt6.QtWidgets import QComboBox
+        self.btn_info_tipos = QPushButton("Info tipos")
+        self.btn_info_tipos.setToolTip("Ventana con la info/leyenda de tipos de la visualizacion")
+        self.btn_info_tipos.clicked.connect(self._abrir_info_tipos)
         self.cmb_tipo = QComboBox()
         self.cmb_tipo.setToolTip("Filtrar por tipo celular del SVG (como Studio)")
         self.cmb_tipo.currentTextChanged.connect(lambda _: self._dibujar())
@@ -360,19 +362,40 @@ class VisorPhysiCell(QWidget):
         self.cmb_vel.setCurrentText("1x")
         self.cmb_vel.setToolTip("Velocidad de reproducción")
         self.cmb_vel.currentTextChanged.connect(self._velocidad)
-        top.addWidget(self.dir_edit, 1)
-        top.addWidget(btn)
-        top.addWidget(self.chk_sub)
-        top.addWidget(self.chk_edge)
-        top.addWidget(self.chk_vec)
-        top.addWidget(self.chk_att)
-        top.addWidget(self.cmb_color2d)
-        top.addWidget(self.btn_vtk)
-        self.btn_info_tipos = QPushButton("Info tipos")
-        self.btn_info_tipos.setToolTip("Ventana con la info/leyenda de tipos de la visualizacion")
-        self.btn_info_tipos.clicked.connect(self._abrir_info_tipos)
-        top.addWidget(self.btn_info_tipos)
-        lay.addLayout(top)
+        self.cmb_fondo = QComboBox()
+        self.cmb_fondo.addItems(["Blanco", "Negro", "Gris"])
+        self.cmb_fondo.setCurrentText("Blanco")
+        self.cmb_fondo.setToolTip("Color de fondo del visor 2D/3D")
+        self.cmb_fondo.currentTextChanged.connect(lambda _: self._dibujar())
+
+        top = QWidget()
+        top_lay = QVBoxLayout(top)
+        top_lay.setContentsMargins(0, 0, 0, 0)
+        top_lay.setSpacing(8)
+        row_top = QHBoxLayout()
+        row_top.setContentsMargins(0, 0, 0, 0)
+        row_top.setSpacing(8)
+        row_top.addWidget(self.dir_edit, 1)
+        row_top.addWidget(btn)
+        row_top.addStretch()
+        row_top.addWidget(self.cmb_fondo)
+        row_top.addWidget(self.btn_vtk)
+        row_top.addWidget(self.btn_info_tipos)
+        top_lay.addLayout(row_top)
+        row_capas = QHBoxLayout()
+        row_capas.setContentsMargins(0, 0, 0, 0)
+        row_capas.setSpacing(8)
+        self.gb_capas = QGroupBox("Capas")
+        g_lay = QHBoxLayout(self.gb_capas)
+        g_lay.setContentsMargins(8, 4, 8, 4)
+        g_lay.addWidget(self.chk_sub)
+        g_lay.addWidget(self.chk_edge)
+        g_lay.addWidget(self.chk_vec)
+        g_lay.addWidget(self.chk_att)
+        g_lay.addWidget(self.cmb_color2d)
+        row_capas.addWidget(self.gb_capas)
+        top_lay.addLayout(row_capas)
+        lay.addWidget(top)
         filt = QHBoxLayout()
         filt.addWidget(QLabel("Tipo:"))
         filt.addWidget(self.cmb_tipo, 1)
@@ -407,6 +430,9 @@ class VisorPhysiCell(QWidget):
         hsplit.addWidget(self.tabs_vis, 1)
         lay.addLayout(hsplit)
         bot = QHBoxLayout()
+        self.lbl_frame = QLabel("Frame 1/1")
+        self.lbl_frame.setObjectName("Muted")
+        bot.addWidget(self.lbl_frame)
         self.btn_prev = QPushButton("<")
         self.btn_prev.setFixedWidth(40)
         self.btn_prev.clicked.connect(lambda: self._mover(-1))
@@ -536,6 +562,34 @@ class VisorPhysiCell(QWidget):
     def _velocidad(self, txt):
         ms = {"0.5x": 1600, "1x": 800, "2x": 400, "4x": 200}.get(txt, 800)
         self._timer.setInterval(ms)
+
+    def _color_fondo(self):
+        """Color de fondo actualmente seleccionado en el visor (2D/3D)."""
+        txt = self.cmb_fondo.currentText() if hasattr(self, "cmb_fondo") else "Blanco"
+        return {"Blanco": "#FFFFFF", "Negro": "#000000", "Gris": "#808080"}.get(txt, "#FFFFFF")
+
+    def _es_fondo_oscuro(self, color):
+        """Detecta si el color de fondo es oscuro (para ajustar texto visible)."""
+        c = (color or "#FFFFFF").lstrip("#")
+        r, g, b = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 140
+
+    def _aplicar_fondo_3d(self, color):
+        """Aplica el color de fondo al renderizado 3D (axes + figure)."""
+        try:
+            self.ax3.set_facecolor(color)
+            self.fig3.patch.set_facecolor(color)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _fmt_tiempo(t):
+        """Formatea el tiempo del frame a un formato legible (días / h / min)."""
+        txt = (t or "").strip().lower()
+        if not txt:
+            return "—"
+        txt = txt.replace("days", "d").replace("day", "d").replace("hrs", "h").replace("hr", "h").replace("mins", "min")
+        return txt
 
     def _mover(self, delta):
         if not self.snaps:
@@ -683,8 +737,16 @@ class VisorPhysiCell(QWidget):
             self.ax2.set_xlim(self.bounds["xmin"], self.bounds["xmax"])
             self.ax2.set_ylim(self.bounds["ymin"], self.bounds["ymax"])
         self.ax2.set_aspect("equal")
-        self.ax2.set_facecolor("white")
+        color_fondo = self._color_fondo()
+        self.ax2.set_facecolor(color_fondo)
+        if self._es_fondo_oscuro(color_fondo):
+            self.ax2.xaxis.label.set_color("#E8E8E8")
+            self.ax2.yaxis.label.set_color("#E8E8E8")
+            self.ax2.title.set_color("#E8E8E8")
+            self.ax2.tick_params(colors="#E8E8E8")
         self.ax2.set_title(f"{d['time']} ({d['n']} agents)", fontsize=9)
+        self._aplicar_fondo_3d(color_fondo)
+        self.lbl_frame.setText(f"Frame {idx+1}/{len(self.snaps)} · {self._fmt_tiempo(d.get('time'))}")
         # 3D con mismos colores y tamaño por radio + enlaces de interacción
         if len(x):
             import numpy as _np

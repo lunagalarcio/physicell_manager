@@ -1,4 +1,4 @@
-"""Página de Configuraciones: biblioteca de XML de PhysiCell."""
+"""Página de Biblioteca de XML: biblioteca de configuraciones de PhysiCell."""
 import os
 import glob as _g
 
@@ -27,8 +27,8 @@ class PaginaConfiguraciones(PaginaBase):
 
         lay.addWidget(
             Seccion(
-                "Configuraciones",
-                "Biblioteca de XML de PhysiCell: importa, edita y valida sin listas "
+                "Biblioteca de XML",
+                "Importa, edita y valida archivos XML de PhysiCell sin listas "
                 "rígidas de parámetros. Asocia un XML a un experimento o escenario.",
             )
         )
@@ -105,9 +105,9 @@ class PaginaConfiguraciones(PaginaBase):
             return
         r = importar_config(src, self._dir())
         if r.get("ok"):
-            QMessageBox.information(self, "Configuraciones", f"Importado: {r['path']}")
+            QMessageBox.information(self, "Biblioteca de XML", f"Importado: {r['path']}")
         else:
-            QMessageBox.warning(self, "Configuraciones", r.get("error", "Error"))
+            QMessageBox.warning(self, "Biblioteca de XML", r.get("error", "Error"))
         self.refrescar()
 
     def _nuevo(self):
@@ -122,20 +122,20 @@ class PaginaConfiguraciones(PaginaBase):
         try:
             _s.copyfile(base, dst)
         except Exception as e:
-            QMessageBox.warning(self, "Configuraciones", f"No se pudo crear desde plantilla: {e}")
+            QMessageBox.warning(self, "Biblioteca de XML", f"No se pudo crear desde plantilla: {e}")
             return
         self.refrescar()
-        QMessageBox.information(self, "Configuraciones", f"Creada: {dst}")
+        QMessageBox.information(self, "Biblioteca de XML", f"Creada: {dst}")
 
     def _editar(self):
         p = self._sel()
         if not p:
-            QMessageBox.warning(self, "Configuraciones", "Selecciona un archivo de la tabla.")
+            QMessageBox.warning(self, "Biblioteca de XML", "Selecciona un archivo de la tabla.")
             return
         try:
             txt = leer_texto(p)
         except Exception as e:
-            QMessageBox.warning(self, "Configuraciones", str(e))
+            QMessageBox.warning(self, "Biblioteca de XML", str(e))
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Editar {p}")
@@ -188,35 +188,35 @@ class PaginaConfiguraciones(PaginaBase):
         if dlg.exec():
             r = guardar_texto(p, ed.toPlainText())
             if not r.get("ok"):
-                QMessageBox.warning(self, "Configuraciones", r.get("error", "Error"))
+                QMessageBox.warning(self, "Biblioteca de XML", r.get("error", "Error"))
             self.refrescar()
 
     def _validar(self):
         p = self._sel()
         if not p:
-            QMessageBox.warning(self, "Configuraciones", "Selecciona un archivo de la tabla.")
+            QMessageBox.warning(self, "Biblioteca de XML", "Selecciona un archivo de la tabla.")
             return
         v = vc(p)
         if v.get("ok"):
             msg = "Válido." + (
                 f" Avisos: {'; '.join(v.get('warnings', []))}" if v.get("warnings") else ""
             )
-            QMessageBox.information(self, "Configuraciones", msg)
+            QMessageBox.information(self, "Biblioteca de XML", msg)
         else:
-            QMessageBox.warning(self, "Configuraciones", "; ".join(v.get("errores", [])))
+            QMessageBox.warning(self, "Biblioteca de XML", "; ".join(v.get("errores", [])))
         self.refrescar()
 
     def _asociar(self):
         p = self._sel()
         if not p:
-            QMessageBox.warning(self, "Configuraciones", "Selecciona un archivo de la tabla.")
+            QMessageBox.warning(self, "Biblioteca de XML", "Selecciona un archivo de la tabla.")
             return
         from .. import simulador as SIM
         conn = self.conn()
         filas = SIM.listar_experimentos(conn)
         conn.close()
         if not filas:
-            QMessageBox.warning(self, "Configuraciones", "No hay experimentos. Crea uno primero.")
+            QMessageBox.warning(self, "Biblioteca de XML", "No hay experimentos. Crea uno primero.")
             return
         dlg = QDialog(self)
         dlg.setWindowTitle("Asociar XML")
@@ -238,6 +238,6 @@ class PaginaConfiguraciones(PaginaBase):
                 self.db_path(), eid, config_xml_path=p,
             )
             if not r.get("ok"):
-                QMessageBox.warning(self, "Configuraciones", r.get("error", "Error al asociar"))
+                QMessageBox.warning(self, "Biblioteca de XML", r.get("error", "Error al asociar"))
             else:
-                QMessageBox.information(self, "Configuraciones", f"Asociado al experimento #{eid}.")
+                QMessageBox.information(self, "Biblioteca de XML", f"Asociado al experimento #{eid}.")
