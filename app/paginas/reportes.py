@@ -34,19 +34,18 @@ class PaginaReportes(PaginaBase):
 
         row = QHBoxLayout()
         self.exp_combo = QComboBox()
-        self.cmb_formato = QComboBox()
-        self.cmb_formato.addItems(["HTML", "PDF"])
-        self.cmb_formato.setCurrentText("HTML")
-        self.cmb_formato.setToolTip("Formato en que generar el informe del experimento: HTML o PDF.")
-        b_gen = QPushButton("Generar informe")
-        b_gen.setObjectName("Primary")
-        b_gen.clicked.connect(self._generar)
+        b_gen_html = QPushButton("Generar informe (HTML)")
+        b_gen_html.setObjectName("Primary")
+        b_gen_html.clicked.connect(self._generar_html)
+        b_gen_pdf = QPushButton("Generar informe (PDF)")
+        b_gen_pdf.setObjectName("Secondary")
+        b_gen_pdf.clicked.connect(self._generar_pdf)
         b_open = QPushButton("Abrir carpeta")
         b_open.setObjectName("Secondary")
         b_open.clicked.connect(self._abrir_carpeta)
         row.addWidget(self.exp_combo, 1)
-        row.addWidget(self.cmb_formato)
-        row.addWidget(b_gen)
+        row.addWidget(b_gen_html)
+        row.addWidget(b_gen_pdf)
         row.addWidget(b_open)
         bar = QWidget()
         bar.setLayout(row)
@@ -88,25 +87,39 @@ class PaginaReportes(PaginaBase):
             eid, t = fila[0], fila[1]
             self.exp_combo.addItem(f"#{eid} {t}", eid)
 
-    def _generar(self):
+    def _generar_html(self):
+        """Genera el informe del experimento en formato HTML."""
         eid = self.exp_combo.currentData()
         if not eid:
             return
-        formato = str(self.cmb_formato.currentText() or "HTML")
         base = os.path.dirname(self.db_path())
         exp_dir = os.path.join(base, f"exp_{eid}")
-        if formato == "PDF":
-            html = os.path.join(exp_dir, "reporte.html")
-            r = generar_reporte_html(eid, self.db_path(), html)
-            if r.get("ok"):
-                r = exportar_reporte_pdf(html, os.path.join(exp_dir, "reporte.pdf"))
-        else:
-            r = generar_reporte_html(eid, self.db_path(), os.path.join(exp_dir, "reporte.html"))
+        r = generar_reporte_html(eid, self.db_path(), os.path.join(exp_dir, "reporte.html"))
         if r.get("ok"):
-            QMessageBox.information(self, "Reportes", f"Generado ({formato}): {r.get('path', r)}")
+            QMessageBox.information(self, "Reportes", f"Generado: {r.get('path', r)}")
         else:
             QMessageBox.warning(self, "Reportes", r.get("error", "Error"))
-        self.refrescar()
+        self.refreshar()
+
+    def _generar_pdf(self):
+        """Genera el informe del experimento en formato PDF a partir del HTML."""
+        eid = self.exp_combo.currentData()
+        if not eid:
+            return
+        base = os.path.dirname(self.db_path())
+        exp_dir = os.path.join(base, f"exp_{eid}")
+        html = os.path.join(exp_dir, "reporte.html")
+        r = generar_reporte_html(eid, self.db_path(), html)
+        if not r.get("ok"):
+            QMessageBox.warning(self, "Reportes", r.get("error", "Error"))
+            return
+        pdf = os.path.join(exp_dir, "reporte.pdf")
+        r2 = exportar_reporte_pdf(html, pdf)
+        if r2.get("ok"):
+            QMessageBox.information(self, "Reportes", f"Generado: {r2.get('path', r2)}")
+        else:
+            QMessageBox.warning(self, "Reportes", r2.get("error", "Error"))
+        self.refreshar()
 
     def _abrir_carpeta(self):
         base = os.path.dirname(self.db_path())
