@@ -37,17 +37,23 @@ class PaginaConfiguraciones(PaginaBase):
         row = QHBoxLayout()
         b_imp = QPushButton("Importar XML…")
         b_imp.setObjectName("Primary")
+        b_imp.setMinimumHeight(34)
+        b_imp.setMaximumWidth(200)
         b_imp.clicked.connect(self._importar)
         b_new = QPushButton("Nuevo desde plantilla")
         b_new.setObjectName("Secondary")
+        b_new.setMinimumHeight(34)
+        b_new.setMaximumWidth(200)
         b_new.clicked.connect(self._nuevo)
         b_ref = QPushButton("Actualizar")
         b_ref.setObjectName("Secondary")
+        b_ref.setMinimumHeight(34)
+        b_ref.setMaximumWidth(130)
         b_ref.clicked.connect(self.refrescar)
         row.addWidget(b_imp)
         row.addWidget(b_new)
         row.addWidget(b_ref)
-        row.addStretch()
+        row.addStretch(1)
         bar = QWidget()
         bar.setLayout(row)
         lay.addWidget(bar)
@@ -62,17 +68,23 @@ class PaginaConfiguraciones(PaginaBase):
         row2 = QHBoxLayout()
         b_ed = QPushButton("Editar…")
         b_ed.setObjectName("Secondary")
+        b_ed.setMinimumHeight(34)
+        b_ed.setMaximumWidth(130)
         b_ed.clicked.connect(self._editar)
         b_val = QPushButton("Validar")
         b_val.setObjectName("Secondary")
+        b_val.setMinimumHeight(34)
+        b_val.setMaximumWidth(130)
         b_val.clicked.connect(self._validar)
         b_as = QPushButton("Asociar a experimento…")
         b_as.setObjectName("Secondary")
+        b_as.setMinimumHeight(34)
+        b_as.setMaximumWidth(220)
         b_as.clicked.connect(self._asociar)
         row2.addWidget(b_ed)
         row2.addWidget(b_val)
         row2.addWidget(b_as)
-        row2.addStretch()
+        row2.addStretch(1)
         bar2 = QWidget()
         bar2.setLayout(row2)
         lay.addWidget(bar2)
@@ -112,8 +124,22 @@ class PaginaConfiguraciones(PaginaBase):
 
     def _nuevo(self):
         import shutil as _s
-        base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                            "config", "PhysiCell_settings.xml")
+        # Buscar la plantilla: primero al nivel raíz del proyecto (config/),
+        # luego dentro de app/config/ como fallback.
+        _pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # app/
+        _root_dir = os.path.dirname(_pkg_dir)                                      # proyecto/
+        base = os.path.join(_root_dir, "config", "PhysiCell_settings.xml")
+        if not os.path.isfile(base):
+            # Fallback: buscar en app/config/
+            base = os.path.join(_pkg_dir, "config", "PhysiCell_settings.xml")
+        if not os.path.isfile(base):
+            QMessageBox.warning(
+                self, "Biblioteca de XML",
+                f"No se encontró la plantilla PhysiCell_settings.xml.\n"
+                f"Buscada en:\n  {os.path.join(_root_dir, 'config')}\n"
+                f"  {os.path.join(_pkg_dir, 'config')}"
+            )
+            return
         dst = os.path.join(self._dir(), "nueva_config.xml")
         n = 1
         while os.path.isfile(dst):

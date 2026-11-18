@@ -34,6 +34,10 @@ class PaginaReportes(PaginaBase):
 
         row = QHBoxLayout()
         self.exp_combo = QComboBox()
+        self.cmb_formato = QComboBox()
+        self.cmb_formato.addItems(["HTML", "PDF"])
+        self.cmb_formato.setCurrentText("HTML")
+        self.cmb_formato.setToolTip("Formato en que generar el informe del experimento: HTML o PDF.")
         b_gen = QPushButton("Generar informe")
         b_gen.setObjectName("Primary")
         b_gen.clicked.connect(self._generar)
@@ -41,6 +45,7 @@ class PaginaReportes(PaginaBase):
         b_open.setObjectName("Secondary")
         b_open.clicked.connect(self._abrir_carpeta)
         row.addWidget(self.exp_combo, 1)
+        row.addWidget(self.cmb_formato)
         row.addWidget(b_gen)
         row.addWidget(b_open)
         bar = QWidget()
@@ -66,8 +71,9 @@ class PaginaReportes(PaginaBase):
         self._cargar_exps()
         base = os.path.dirname(self.db_path())
         reps = sorted(_g.glob(os.path.join(base, "exp_*", "reporte.html")))
+        reps_pdf = sorted(_g.glob(os.path.join(base, "exp_*", "reporte.pdf")))
         filas = []
-        for p in reps:
+        for p in sorted(set(reps + reps_pdf)):
             exp = os.path.basename(os.path.dirname(p))
             gra = os.path.join(os.path.dirname(p), "comparacion.png")
             filas.append([exp, p, gra if os.path.isfile(gra) else "—"])
@@ -86,11 +92,18 @@ class PaginaReportes(PaginaBase):
         eid = self.exp_combo.currentData()
         if not eid:
             return
+        formato = str(self.cmb_formato.currentText() or "HTML")
         base = os.path.dirname(self.db_path())
-        out = os.path.join(base, f"exp_{eid}", "reporte.html")
-        r = generar_reporte_html(eid, self.db_path(), out)
+        exp_dir = os.path.join(base, f"exp_{eid}")
+        if formato == "PDF":
+            html = os.path.join(exp_dir, "reporte.html")
+            r = generar_reporte_html(eid, self.db_path(), html)
+            if r.get("ok"):
+                r = exportar_reporte_pdf(html, os.path.join(exp_dir, "reporte.pdf"))
+        else:
+            r = generar_reporte_html(eid, self.db_path(), os.path.join(exp_dir, "reporte.html"))
         if r.get("ok"):
-            QMessageBox.information(self, "Reportes", f"Generado: {r['path']}")
+            QMessageBox.information(self, "Reportes", f"Generado ({formato}): {r.get('path', r)}")
         else:
             QMessageBox.warning(self, "Reportes", r.get("error", "Error"))
         self.refrescar()

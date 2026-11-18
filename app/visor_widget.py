@@ -451,8 +451,10 @@ class VisorPhysiCell(QWidget):
         bot.addWidget(self.btn_play)
         self.btn_reset = QPushButton("Restablecer vista")
         self.btn_reset.setToolTip("Re-dibuja el frame actual con la vista por defecto")
+        self.btn_reset.setMaximumWidth(160)
         self.btn_reset.clicked.connect(self._dibujar)
         bot.addWidget(self.btn_reset)
+        bot.addStretch(1)
         lay.addLayout(bot)
         from PyQt6.QtCore import QTimer
         self._timer = QTimer(self)
@@ -490,12 +492,23 @@ class VisorPhysiCell(QWidget):
         if getattr(self, "_cargando", False):
             return
         self._cargando = True
+        # Detener hilo anterior si sigue vivo antes de crear uno nuevo
+        tl_prev = getattr(self, "_tl", None)
+        if tl_prev is not None and tl_prev.isRunning():
+            try:
+                tl_prev.quit()
+                tl_prev.wait(2000)
+            except Exception:
+                pass
         self._tl = QThread(self)
         self._worker = WorkerCargar(d)
         self._worker.moveToThread(self._tl)
         self._tl.started.connect(self._worker.run)
+        # Usar Qt.ConnectionType.QueuedConnection para evitar emitir a widget destruido
         self._worker.resultado.connect(self._on_carga_resultado)
         self._worker.error.connect(self._on_carga_error)
+        self._worker.resultado.connect(lambda _: self._tl.quit() if self._tl else None)
+        self._worker.error.connect(lambda _: self._tl.quit() if self._tl else None)
         self._tl.finished.connect(self._tl.deleteLater)
         self._tl.start()
 

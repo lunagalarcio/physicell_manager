@@ -97,7 +97,7 @@ class NotionWindow(QMainWindow):
     def _setup_sidebar(self, main_layout):
         from PyQt6.QtWidgets import QComboBox
         self.sidebar = QWidget()
-        self.sidebar.setFixedWidth(260)
+        self.sidebar.setFixedWidth(220)  # Reducido de 260 a 220px
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(16, 20, 16, 20)
         sidebar_layout.setSpacing(8)

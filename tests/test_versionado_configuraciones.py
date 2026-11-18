@@ -227,6 +227,7 @@ def test_cambiar_configuracion_activa_no_modifica_runs_existentes(tmp_db_path):
             run_number INTEGER, status TEXT DEFAULT 'pending',
             start_time DATETIME, end_time DATETIME,
             output_dir TEXT, escenario_id INTEGER, configuracion_id INTEGER,
+            error_message TEXT, log_path TEXT, pid INTEGER, batch_id INTEGER,
             FOREIGN KEY (experiment_id) REFERENCES experiments(id)
         );
     """)

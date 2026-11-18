@@ -57,7 +57,28 @@ CREATE TABLE IF NOT EXISTS runs (
     escenario_id INTEGER,
     configuracion_id INTEGER,
     error_message TEXT,
+    log_path TEXT,
+    pid INTEGER,
+    batch_id INTEGER,
     FOREIGN KEY (experiment_id) REFERENCES experiments(id)
+);
+CREATE TABLE IF NOT EXISTS batches (
+    id INTEGER PRIMARY KEY,
+    experiment_id INTEGER,
+    creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
+    n_replicas INTEGER,
+    xml_path TEXT,
+    xml_sha256 TEXT,
+    exe_path TEXT,
+    exe_sha256 TEXT,
+    seed_base INTEGER DEFAULT 1000,
+    timeout_min INTEGER DEFAULT 0,
+    inactividad_min INTEGER DEFAULT 10,
+    python_version TEXT,
+    plataforma TEXT,
+    notas TEXT,
+    status TEXT DEFAULT 'running',
+    error_message TEXT
 );
 CREATE TABLE IF NOT EXISTS escenarios (
     id INTEGER PRIMARY KEY,

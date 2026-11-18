@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QWidget, QGridLayout, QDialog,
-    QFormLayout, QDialogButtonBox, QMessageBox, QMenu
+    QFormLayout, QDialogButtonBox, QMessageBox, QMenu, QSizePolicy
 )
 
 from .base import (
@@ -23,7 +23,9 @@ class PaginaExperimentos(PaginaBase):
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Buscar por título, descripción o etiquetas...")
-        self.search.setFixedWidth(320)
+        self.search.setMinimumWidth(200)
+        self.search.setMaximumWidth(380)
+        self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search.textChanged.connect(lambda _: self.refrescar())
 
         b = QPushButton("+ Nuevo experimento")

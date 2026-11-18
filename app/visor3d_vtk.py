@@ -171,6 +171,7 @@ class DialogoVTK(QDialog):
         self.titulo = titulo
         self.colores = dict(COLORES_ESTADO)
         self.modo = "estado"
+        self._persistir_muertas = True
         self.setWindowTitle("PhysiCell Manager — Tumor 3D (PyVista/VTK)")
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.setMinimumSize(900, 700)
@@ -246,11 +247,12 @@ class DialogoVTK(QDialog):
         self.chk_dead.setToolTip("Si está activo, las células muertas se ven en rojo/amarillo; si no, se omiten del render.")
         self.chk_dead.stateChanged.connect(lambda _: self.refrescar())
         sl.addWidget(self.chk_dead)
-        self.chk_final = QCheckBox("Al final: desaparecer / persistir")
-        self.chk_final.setChecked(False)
-        self.chk_final.setToolTip("Al llegar al último frame, las células muertas desaparecen; si no, persisten.")
-        self.chk_final.stateChanged.connect(lambda _: self.refrescar())
-        sl.addWidget(self.chk_final)
+        self.cmb_pers = QComboBox()
+        self.cmb_pers.addItems(["Persistir", "No persistir"])
+        self.cmb_pers.setCurrentText("Persistir")
+        self.cmb_pers.setToolTip("Al llegar al último frame: 'Persistir' mantiene visibles las células muertas; 'No persistir' las elimina del render.")
+        self.cmb_pers.currentTextChanged.connect(self._pers_muerte)
+        sl.addWidget(self.cmb_pers)
         sl.addWidget(QLabel("<b>Célula seleccionada</b>"))
         self.info = QTextEdit()
         self.info.setReadOnly(True)
@@ -402,6 +404,13 @@ class DialogoVTK(QDialog):
         except Exception:
             pass
         try:
+            self.cmb_pers.blockSignals(True)
+            self.cmb_pers.setCurrentText("Persistir")
+            self.cmb_pers.blockSignals(False)
+            self._persistir_muertas = True
+        except Exception:
+            pass
+        try:
             self.chk_nuc.setChecked(True)
             self.chk_vec.setChecked(True)
             self.chk_att.setChecked(True)
@@ -463,6 +472,11 @@ class DialogoVTK(QDialog):
         except Exception:
             pass
 
+    def _pers_muerte(self, txt):
+        """Dos opciones para las células que mueren: 'Persistir' o 'No persistir'."""
+        self._persistir_muertas = str(txt) != "No persistir"
+        self.refrescar()
+
     def _color(self, clave):
         from PyQt6.QtGui import QColor as _QC
         c = QColorDialog.getColor(_QC(self.colores[clave]), self, f"Color {NOMBRES_ESTADO[clave]}")
@@ -511,7 +525,8 @@ class DialogoVTK(QDialog):
     def refrescar(self):
         import numpy as _np
         self.plotter.clear()
-        self.plotter.set_background("#141414")
+        fondo = "#141414" if str(self.cmb_fondo.currentText() or "Oscuro") == "Oscuro" else "#F7F7F5"
+        self.plotter.set_background(fondo)
         self._luces()
         if not self.snaps:
             self.lbl_frame.setText("Sin snapshot*.svg. Ejecuta PhysiCell primero.")
@@ -560,7 +575,7 @@ class DialogoVTK(QDialog):
             grupos.append(("var", grupo_ids, None))
         else:
             claves = ("viva", "apoptotica", "necrotica") if self.chk_dead.isChecked() else ("viva",)
-            if self.chk_final.isChecked() and self._frame_final():
+            if not self._persistir_muertas and self._frame_final():
                 claves = ("viva",)
             for clave in claves:
                 ids = [i for i in range(n) if est[i] == clave]

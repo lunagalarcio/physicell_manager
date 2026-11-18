@@ -182,7 +182,7 @@ def leer_frame(output_dir, snap_path):
     dead_vals = [None] * n
     dmod_vals = [None] * n
     # Cruzar con cells.mat si está disponible
-    if cells_mat and cells_mat.get("ok"):
+    if cells_mat is not None:
         d = cells_mat
         ncols = len(d.get("ids", [n]))
         k = min(n, ncols)

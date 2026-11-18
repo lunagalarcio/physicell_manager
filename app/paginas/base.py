@@ -198,11 +198,13 @@ class Seccion(QWidget):
 
         if acciones:
             bar = QHBoxLayout()
+            bar.setSpacing(ESPACIO_S)
             for accion in acciones:
                 bar.addWidget(accion)
             bar.addStretch()
             contenedor = QWidget()
             contenedor.setLayout(bar)
+            contenedor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             lay.addWidget(contenedor)
 
         lay.addSpacing(ESPACIO_M)

@@ -3,7 +3,7 @@ import os
 
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QWidget, QGridLayout, QFrame, QMenu
+    QScrollArea, QWidget, QGridLayout, QFrame, QMenu, QSizePolicy
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -32,8 +32,9 @@ class KpiCard(Tarjeta):
 
     def __init__(self, numero, etiqueta, padre=None):
         super().__init__(padre=padre)
-        self.setFixedWidth(230)
-        self.setFixedHeight(140)
+        self.setMinimumWidth(160)
+        self.setMinimumHeight(100)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         fila = QHBoxLayout()
         fila.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
@@ -63,7 +64,9 @@ class PaginaResumen(PaginaBase):
         # Encabezado con búsqueda y botón nuevo
         self.search = QLineEdit()
         self.search.setPlaceholderText("Buscar experimentos...")
-        self.search.setFixedWidth(280)
+        self.search.setMinimumWidth(180)
+        self.search.setMaximumWidth(320)
+        self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search.textChanged.connect(lambda _: self.refrescar())
 
         b_nuevo = QPushButton("+ Nuevo experimento")

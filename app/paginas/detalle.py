@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from .base import (
     PaginaBase, Seccion, Tarjeta, BadgeEstado, xml_estado, exe_estado,
     exp_estado, ESTILO_ESTADO, ESTADO_BOTON, CampoFormulario, DialogoBase,
-    TablaBase, ESPACIO_M, ESPACIO_L, TAM_H2, resumen_texto,
+    TablaBase, ESPACIO_M, ESPACIO_L, ESPACIO_S, TAM_H2, resumen_texto,
 )
 from .. import simulador as SIM
 from ..xml_validator import validar_config, validar_texto
@@ -138,7 +138,7 @@ class PaginaDetalle(PaginaBase):
             if motivo:
                 detalle_error = " · " + _escape(" ".join(motivo.split())[:120])
 
-        head = QHBoxLayout()
+        # ---------- Encabezado del experimento (diseño: tarjeta) ----------
         left = QVBoxLayout()
         h = QLabel(title or f"Experimento {eid}")
         h.setObjectName("H1")
@@ -149,12 +149,19 @@ class PaginaDetalle(PaginaBase):
         )
         st.setTextFormat(Qt.TextFormat.RichText)
         left.addWidget(st)
-        head.addLayout(left, 1)
+        head_frame = QFrame()
+        head_frame.setObjectName("Card")
+        head_lay = QVBoxLayout(head_frame)
+        head_lay.setContentsMargins(ESPACIO_L, ESPACIO_M, ESPACIO_L, ESPACIO_M)
+        head_lay.setSpacing(ESPACIO_S)
+        head_row = QHBoxLayout()
+        head_row.addLayout(left, 1)
         bback = QPushButton("← Volver")
         bback.setObjectName("Secondary")
         bback.clicked.connect(lambda: self.lw.ir("Experimentos"))
-        head.addWidget(bback)
-        lay.addLayout(head)
+        head_row.addWidget(bback)
+        head_lay.addLayout(head_row)
+        lay.addWidget(head_frame)
 
         # ---------- Pestañas ----------
         tabs = QTabWidget()
@@ -205,35 +212,76 @@ class PaginaDetalle(PaginaBase):
         v.setSpacing(ESPACIO_M)
 
         tanda = SIM.tanda_de_estados([(x[0], x[1], x[2]) for x in runs])
-        linea_tanda = ""
+        ok = 0
         if tanda:
             ok = sum(1 for e in tanda if e == "completed")
-            linea_tanda = (
-                f"Última ejecución: <b>{ok}/{len(tanda)}</b> completadas · {estado}<br>"
-            )
 
-        info = QLabel(
-            f"<h2>{title or f'Experimento {eid}'}</h2>"
-            f"<p>{desc or 'Sin descripción'}</p>"
-            f"<p>Estado: <b style='color:{col}'>{estado}</b><br>"
-            f"Creado: {creado or '—'} &nbsp; Modificado: {modif or '—'}<br>"
-            f"Etiquetas: {tags or '—'}</p>"
-            f"<p>Escenarios: <b>{n_esc}</b> &nbsp; Ejecuciones: <b>{len(runs)}</b><br>"
-            f"{linea_tanda}XML: {cfg or 'no asignado'}</p>"
+        # Título del experimento
+        h = QLabel(title or f"Experimento {eid}")
+        h.setObjectName("H1")
+        v.addWidget(h)
+
+        # Descripción dentro de su propia tarjeta
+        tarjeta_desc = QFrame()
+        tarjeta_desc.setObjectName("Card")
+        ld = QVBoxLayout(tarjeta_desc)
+        ld.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        ld.setSpacing(ESPACIO_S)
+        ldesc = QLabel(desc or "Sin descripción")
+        ldesc.setObjectName("CardDesc")
+        ldesc.setWordWrap(True)
+        ld.addWidget(ldesc)
+        v.addWidget(tarjeta_desc)
+
+        # Estado + meta
+        detalle_error = ""
+        if estado == "Con errores" and runs:
+            ultima = max(runs, key=lambda x: x[0] or 0)
+            motivo = (ultima[6] or "").strip() if len(ultima) > 6 else ""
+            if motivo:
+                detalle_error = " · " + _escape(" ".join(motivo.split())[:120])
+        st = QLabel(
+            f"<b style='color:{col}'>● {estado}</b> &nbsp; "
+            f"<span style='color:#A6A6A6'>{tags or 'sin etiquetas'} • {n_esc} escenarios • {len(runs)} runs{detalle_error}</span>"
         )
-        info.setWordWrap(True)
-        v.addWidget(info)
+        st.setTextFormat(Qt.TextFormat.RichText)
+        st.setWordWrap(True)
+        v.addWidget(st)
 
-        grid = QGridLayout()
-        accesos = [("Ajustes del experimento", 0), ("Ejecuciones", 2), ("Visualización 2D/3D", 3), ("Resultados", 4)]
-        for i, (lbl, idx) in enumerate(accesos):
-            b = QPushButton(lbl)
-            b.setObjectName("Secondary")
-            b.clicked.connect(lambda _=False, i=idx: self.tabs_widget.setCurrentIndex(i))
-            grid.addWidget(b, 0, i)
-        cw = QFrame()
-        cw.setLayout(grid)
-        v.addWidget(cw)
+        meta = QLabel(
+            f"Última ejecución: {ok}/{len(tanda) if tanda else 0} completadas · Creado: {creado or '—'} · Modificado: {modif or '—'}"
+            if tanda else "Sin ejecuciones registradas"
+        )
+        meta.setObjectName("Muted")
+        meta.setWordWrap(True)
+        v.addWidget(meta)
+
+        # ---------- Tarjetas de resumen (KPIs visuales) ----------
+        fila_kpi = QHBoxLayout()
+
+        def _kpi(titulo, valor, color=None):
+            c = QFrame()
+            c.setObjectName("Card")
+            lc = QVBoxLayout(c)
+            lc.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+            lc.setSpacing(ESPACIO_S)
+            lt = QLabel(titulo)
+            lt.setObjectName("CardMetricaEtiqueta")
+            lv = QLabel(valor)
+            lv.setObjectName("CardMetricaValor")
+            if color:
+                lv.setStyleSheet(f"color: {color};")
+            lc.addWidget(lt)
+            lc.addWidget(lv)
+            fila_kpi.addWidget(c)
+            return c
+
+        _kpi("Estado", estado, col)
+        _kpi("Ejecuciones", f"{len(runs)} runs", None)
+        _kpi("Escenarios", f"{n_esc}", None)
+        _kpi("XML", "Válido" if xml_estado(cfg) == "Válido" else ("Sin asignar" if not cfg else "Inválido"), None)
+
+        v.addLayout(fila_kpi)
         v.addStretch()
         return w
 
@@ -241,53 +289,90 @@ class PaginaDetalle(PaginaBase):
     # Pestaña: Ajustes del experimento
     # =====================================================================
     def _tab_config(self, eid, cfg, binp="", cpp="", h=""):
-        w = QFrame()
-        w.setObjectName("Card")
-        v = QVBoxLayout(w)
-        v.setSpacing(ESPACIO_M)
+        from PyQt6.QtWidgets import QScrollArea
+        # Contenedor externo: un QScrollArea para que nada se corte ni acumule
+        outer = QWidget()
+        outer_lay = QVBoxLayout(outer)
+        outer_lay.setContentsMargins(0, 0, 0, 0)
+        outer_lay.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        inner = QWidget()
+        v = QVBoxLayout(inner)
+        v.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
+        v.setSpacing(ESPACIO_L)
+
+        # ================================================================
+        # SECCIÓN 1: Archivos del experimento
+        # ================================================================
+        sec1 = QFrame()
+        sec1.setObjectName("CardElevada")
+        sec1_lay = QVBoxLayout(sec1)
+        sec1_lay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
+        sec1_lay.setSpacing(ESPACIO_M)
+
+        lbl_sec1 = QLabel("Archivos del experimento")
+        lbl_sec1.setObjectName("H2")
+        sec1_lay.addWidget(lbl_sec1)
+
+        hint1 = QLabel("Asigna el XML de PhysiCell y el ejecutable compilado para lanzar réplicas.")
+        hint1.setObjectName("Muted")
+        hint1.setWordWrap(True)
+        sec1_lay.addWidget(hint1)
 
         self.cfg_xml = QLineEdit(cfg or "")
         self.cfg_xml.setPlaceholderText(".../PhysiCell_settings.xml — plantilla de réplicas")
-        v.addWidget(self._file_row("XML del experimento:", self.cfg_xml, self._browse_cfg_detalle))
+        self.cfg_xml.setMinimumHeight(32)
+        sec1_lay.addWidget(self._file_row("XML del experimento:", self.cfg_xml, self._browse_cfg_detalle))
 
         self.cfg_exe = QLineEdit(binp or getattr(self.lw, "_last_exe", ""))
         self.cfg_exe.setPlaceholderText(".../project.exe — motor PhysiCell compilado")
-        v.addWidget(self._file_row("Motor PhysiCell:", self.cfg_exe, self._browse_exe_detalle))
+        self.cfg_exe.setMinimumHeight(32)
+        sec1_lay.addWidget(self._file_row("Motor PhysiCell:", self.cfg_exe, self._browse_exe_detalle))
 
         self.cfg_cpp = QLineEdit(cpp or "")
         self.cfg_cpp.setPlaceholderText(".../custom.cpp — reglas propias del motor (opcional)")
-        v.addWidget(self._file_row("custom.cpp del motor:", self.cfg_cpp, self._browse_cpp_detalle))
+        self.cfg_cpp.setMinimumHeight(32)
+        sec1_lay.addWidget(self._file_row("custom.cpp del motor:", self.cfg_cpp, self._browse_cpp_detalle))
 
         self.cfg_h = QLineEdit(h or "")
         self.cfg_h.setPlaceholderText(".../custom.h — encabezado del motor (opcional)")
-        v.addWidget(self._file_row("custom.h del motor:", self.cfg_h, self._browse_h_detalle))
+        self.cfg_h.setMinimumHeight(32)
+        sec1_lay.addWidget(self._file_row("custom.h del motor:", self.cfg_h, self._browse_h_detalle))
 
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Réplicas por ejecución:"))
+        # Réplicas por ejecución
+        row_reps = QHBoxLayout()
+        lbl_reps = QLabel("Réplicas por ejecución:")
+        lbl_reps.setFixedWidth(170)
         self.cfg_reps = QSpinBox()
         self.cfg_reps.setRange(1, 50)
         self.cfg_reps.setValue(3)
-        row.addWidget(self.cfg_reps)
-        row.addStretch()
-        c = QFrame()
-        c.setLayout(row)
-        v.addWidget(c)
+        self.cfg_reps.setMinimumWidth(80)
+        self.cfg_reps.setMaximumWidth(120)
+        row_reps.addWidget(lbl_reps)
+        row_reps.addWidget(self.cfg_reps)
+        row_reps.addStretch()
+        sec1_lay.addLayout(row_reps)
 
-        self.cfg_out = QLabel(f"Salida: {os.path.join(os.path.dirname(self.db_path()), f'exp_{eid}')}")
+        # Estado y salidas
+        self.cfg_out = QLabel(f"Carpeta de salida: {os.path.join(os.path.dirname(self.db_path()), f'exp_{eid}')}")
         self.cfg_out.setObjectName("Muted")
         self.cfg_out.setWordWrap(True)
-        v.addWidget(self.cfg_out)
+        sec1_lay.addWidget(self.cfg_out)
 
         self.cfg_salidas = QLabel("")
         self.cfg_salidas.setObjectName("Muted")
         self.cfg_salidas.setWordWrap(True)
-        v.addWidget(self.cfg_salidas)
+        sec1_lay.addWidget(self.cfg_salidas)
 
         self.cfg_estado = QLabel("")
         self.cfg_estado.setWordWrap(True)
-        v.addWidget(self.cfg_estado)
+        sec1_lay.addWidget(self.cfg_estado)
 
-        btns = QHBoxLayout()
+        # Botones — fila 1: Validar + Probar motor
         b1 = QPushButton("Validar archivos")
         b1.setObjectName("Secondary")
         b1.clicked.connect(self._validar_detalle)
@@ -298,69 +383,120 @@ class PaginaDetalle(PaginaBase):
             "termina y guarda resultados. Detecta DLLs incompatibles en segundos."
         )
         self.btn_probar.clicked.connect(self._probar_motor)
+        # Botones — fila 2: Editar XML + Guardar
         b2 = QPushButton("Guardar configuración")
         b2.setObjectName("Primary")
         b2.clicked.connect(self._guardar_cfg_detalle)
         b3 = QPushButton("Editar XML…")
         b3.setObjectName("Secondary")
         b3.clicked.connect(self._editar_xml_detalle)
-        btns.addWidget(b1)
-        btns.addWidget(self.btn_probar)
-        btns.addWidget(b3)
-        btns.addStretch()
-        btns.addWidget(b2)
-        c2 = QFrame()
-        c2.setLayout(btns)
-        v.addWidget(c2)
+        for _b in (b1, self.btn_probar, b3, b2):
+            _b.setMinimumHeight(36)
+            _b.setMinimumWidth(140)
+            _b.setMaximumWidth(220)
+            _b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        btns_row1 = QHBoxLayout()
+        btns_row1.setSpacing(ESPACIO_S)
+        btns_row1.addWidget(b1)
+        btns_row1.addWidget(self.btn_probar)
+        btns_row1.addStretch(1)
+        btns_row2 = QHBoxLayout()
+        btns_row2.setSpacing(ESPACIO_S)
+        btns_row2.addWidget(b3)
+        btns_row2.addWidget(b2)
+        btns_row2.addStretch(1)
+        sec1_lay.addSpacing(4)
+        sec1_lay.addLayout(btns_row1)
+        sec1_lay.addLayout(btns_row2)
+        v.addWidget(sec1)
 
-        v.addWidget(QLabel("<b>Variantes (escenarios)</b>: crea una variante del XML actual sin tocar el original."))
+        # ================================================================
+        # SECCIÓN 2: Variantes (escenarios)
+        # ================================================================
+        sec2 = QFrame()
+        sec2.setObjectName("CardElevada")
+        sec2_lay = QVBoxLayout(sec2)
+        sec2_lay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
+        sec2_lay.setSpacing(ESPACIO_M)
+        lbl_sec2 = QLabel("Variantes (escenarios)")
+        lbl_sec2.setObjectName("H2")
+        sec2_lay.addWidget(lbl_sec2)
+        hint2 = QLabel("Crea una copia del XML actual con un nombre diferente para explorar variaciones sin modificar el original.")
+        hint2.setObjectName("Muted")
+        hint2.setWordWrap(True)
+        sec2_lay.addWidget(hint2)
         vrow = QHBoxLayout()
+        vrow.setSpacing(ESPACIO_S)
         self.var_nombre = QLineEdit()
         self.var_nombre.setPlaceholderText("Nombre de la variante, ej: o2-bajo")
+        self.var_nombre.setMinimumHeight(32)
         bvar = QPushButton("Crear variante")
         bvar.setObjectName("Secondary")
+        bvar.setMinimumHeight(36)
+        bvar.setMinimumWidth(130)
         bvar.clicked.connect(lambda: self._crear_variante(eid))
         vrow.addWidget(self.var_nombre, 1)
         vrow.addWidget(bvar)
-        cv = QFrame()
-        cv.setLayout(vrow)
-        v.addWidget(cv)
+        sec2_lay.addLayout(vrow)
+        v.addWidget(sec2)
 
-        # ---------- Versiones de configuración ----------
-        v.addWidget(QLabel("<b>Versiones de configuración</b>: historial de versiones del XML del experimento."))
+        # ================================================================
+        # SECCIÓN 3: Versiones de configuración
+        # ================================================================
+        sec3 = QFrame()
+        sec3.setObjectName("CardElevada")
+        sec3_lay = QVBoxLayout(sec3)
+        sec3_lay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)
+        sec3_lay.setSpacing(ESPACIO_M)
+        lbl_sec3 = QLabel("Versiones de configuración")
+        lbl_sec3.setObjectName("H2")
+        sec3_lay.addWidget(lbl_sec3)
+        hint3 = QLabel("Historial de versiones del XML. Permite restaurar una configuración anterior para reproducibilidad.")
+        hint3.setObjectName("Muted")
+        hint3.setWordWrap(True)
+        sec3_lay.addWidget(hint3)
         vrow2 = QHBoxLayout()
+        vrow2.setSpacing(ESPACIO_S)
         b_nueva_ver = QPushButton("Registrar nueva versión…")
         b_nueva_ver.setObjectName("Secondary")
+        b_nueva_ver.setMinimumHeight(34)
         b_nueva_ver.clicked.connect(self._registrar_version)
-        b_activar = QPushButton("Activar versión seleccionada")
+        b_activar = QPushButton("Activar seleccionada")
         b_activar.setObjectName("Secondary")
+        b_activar.setMinimumHeight(34)
         b_activar.clicked.connect(self._activar_version)
-        b_ref = QPushButton("Actualizar")
-        b_ref.setObjectName("Secondary")
-        b_ref.clicked.connect(self._cargar_versiones)
+        b_ref_ver = QPushButton("Actualizar")
+        b_ref_ver.setObjectName("Secondary")
+        b_ref_ver.setMinimumHeight(34)
+        b_ref_ver.clicked.connect(self._cargar_versiones)
         vrow2.addWidget(b_nueva_ver)
         vrow2.addWidget(b_activar)
-        vrow2.addWidget(b_ref)
+        vrow2.addWidget(b_ref_ver)
         vrow2.addStretch()
-        c2v = QFrame()
-        c2v.setLayout(vrow2)
-        v.addWidget(c2v)
-
+        sec3_lay.addLayout(vrow2)
         self.tab_versiones = QTableWidget()
         self.tab_versiones.setColumnCount(5)
         self.tab_versiones.setHorizontalHeaderLabels(["Versión", "Nombre", "Archivo XML", "Estado", "Creado"])
+        self.tab_versiones.setMinimumHeight(140)
+        self.tab_versiones.setMaximumHeight(220)
         cab = self.tab_versiones.horizontalHeader()
         cab.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         cab.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         cab.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         cab.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         cab.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.tab_versiones.setColumnWidth(0, 60)
+        self.tab_versiones.setColumnWidth(3, 70)
         self.tab_versiones.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        v.addWidget(self.tab_versiones, 1)
+        sec3_lay.addWidget(self.tab_versiones)
+        v.addWidget(sec3)
         v.addStretch()
+
+        scroll.setWidget(inner)
+        outer_lay.addWidget(scroll)
         self._cargar_versiones()
         self._validar_detalle(silencioso=True)
-        return w
+        return outer
 
     def _crear_variante(self, eid):
         cfg = self.cfg_xml.text().strip() if hasattr(self, "cfg_xml") else ""
@@ -580,71 +716,51 @@ class PaginaDetalle(PaginaBase):
         self.lw.refrescar_resumen()
 
     def _editar_xml_detalle(self):
-        from PyQt6.QtWidgets import QPlainTextEdit
-        from ..config_manager import leer_texto, guardar_texto
+        """Navega a la Biblioteca de XML para editar el XML del experimento."""
         p = self.cfg_xml.text().strip() if hasattr(self, "cfg_xml") else ""
         if not p or not os.path.isfile(p):
-            QMessageBox.warning(self.lw, "Editar", "Selecciona un XML existente primero.")
+            QMessageBox.warning(
+                self.lw, "Editar XML",
+                "Selecciona un XML existente primero (campo 'XML del experimento')."
+            )
             return
-        try:
-            txt = leer_texto(p)
-        except Exception as e:
-            QMessageBox.warning(self.lw, "Editar", str(e))
-            return
-        dlg = QDialog(self.lw)
-        dlg.setWindowTitle("Editar XML")
-        dlg.resize(900, 600)
-        lay = QVBoxLayout(dlg)
-
-        ed = QPlainTextEdit()
-        ed.setPlainText(txt)
-        ed.setFont(QFont("Consolas", 10))
-        lay.addWidget(ed)
-
-        lbl_val = QLabel("")
-        lbl_val.setObjectName("Muted")
-        lbl_val.setWordWrap(True)
-        lbl_val.setMaximumHeight(40)
-        lay.addWidget(lbl_val)
-
-        timer = QTimer(dlg)
-        timer.setSingleShot(True)
-
-        def _validar_tiempo_real():
-            texto = ed.toPlainText()
-            v = validar_texto(texto)
-            if v.get("ok"):
-                avisos = v.get("warnings", [])
-                if avisos:
-                    lbl_val.setText("Válido · " + "; ".join(avisos[:3]))
-                    lbl_val.setStyleSheet("color: #F5B83D;")
-                else:
-                    lbl_val.setText("Válido")
-                    lbl_val.setStyleSheet("color: #4CAF69;")
-            else:
-                lbl_val.setText("Error: " + "; ".join(v.get("errores", [])[:3]))
-                lbl_val.setStyleSheet("color: #E5484D;")
-
-        def _programar_validacion():
-            timer.stop()
-            timer.start(400)
-
-        ed.textChanged.connect(_programar_validacion)
-        timer.timeout.connect(_validar_tiempo_real)
-        _validar_tiempo_real()
-
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        btns.button(QDialogButtonBox.StandardButton.Save).setObjectName("Primary")
-        btns.button(QDialogButtonBox.StandardButton.Cancel).setObjectName("Secondary")
-        lay.addWidget(btns)
-        btns.accepted.connect(dlg.accept)
-        btns.rejected.connect(dlg.reject)
-        if dlg.exec():
-            r = guardar_texto(p, ed.toPlainText())
-            if r.get("ok"):
-                QMessageBox.information(self.lw, "Editar", "XML guardado.")
-            else:
-                QMessageBox.warning(self.lw, "Editar", r.get("error", "Error"))
+        # Importar el XML en la biblioteca si no está ya allí, luego navegar
+        from ..config_manager import importar_config
+        import shutil as _shutil
+        pagina_bib = self.lw.paginas.get("Biblioteca de XML")
+        if pagina_bib is not None:
+            bib_dir = pagina_bib._dir()
+            xml_en_bib = os.path.normcase(os.path.normpath(p)).startswith(
+                os.path.normcase(os.path.normpath(bib_dir))
+            )
+            if not xml_en_bib:
+                # Copiar a la biblioteca si no está allí
+                dst = os.path.join(bib_dir, os.path.basename(p))
+                if not os.path.isfile(dst):
+                    try:
+                        _shutil.copyfile(p, dst)
+                    except Exception as e:
+                        QMessageBox.warning(self.lw, "Editar XML",
+                                            f"No se pudo copiar el XML a la biblioteca: {e}")
+                        return
+                # Actualizar la ruta del experimento al archivo en la biblioteca
+                p = dst
+                if hasattr(self, "cfg_xml"):
+                    self.cfg_xml.setText(dst)
+            # Refrescar la biblioteca y seleccionar el archivo
+            pagina_bib.refrescar()
+            # Seleccionar la fila del archivo en la tabla
+            tabla = pagina_bib.table
+            for row in range(tabla.rowCount()):
+                item = tabla.item(row, 0)
+                if item and os.path.normcase(item.text()) == os.path.normcase(p):
+                    tabla.selectRow(row)
+                    break
+        # Navegar a la Biblioteca de XML
+        self.lw.ir("Biblioteca de XML")
+        # Lanzar el editor automáticamente para que el usuario edite de inmediato
+        if pagina_bib is not None:
+            pagina_bib._editar()
 
     # =====================================================================
     # Pestaña: Ejecuciones
@@ -701,33 +817,53 @@ class PaginaDetalle(PaginaBase):
         info.setWordWrap(True)
         v.addWidget(info)
 
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Réplicas:"))
+        # Fila parámetros: Réplicas + Límite
+        row_params = QHBoxLayout()
+        row_params.setSpacing(ESPACIO_S)
+        row_params.addWidget(QLabel("Réplicas:"))
         self.run_reps = QSpinBox()
         self.run_reps.setRange(1, 50)
         self.run_reps.setValue(getattr(self, "cfg_reps", QSpinBox()).value() if hasattr(self, "cfg_reps") else 3)
-        row.addWidget(self.run_reps)
-        row.addWidget(QLabel("Límite por réplica (min):"))
+        self.run_reps.setMinimumWidth(70)
+        row_params.addWidget(self.run_reps)
+        row_params.addWidget(QLabel("Límite por réplica (min):"))
         self.run_timeout = QSpinBox()
         self.run_timeout.setRange(0, 10080)  # hasta 7 dias; 0 = sin limite
         self.run_timeout.setValue(0)
+        self.run_timeout.setMinimumWidth(80)
         self.run_timeout.setToolTip(
             "0 = sin límite absoluto (recomendado).\n"
             "Si el motor deja de escribir 10 min seguidos, se cancela y se explica."
         )
-        row.addWidget(self.run_timeout)
+        row_params.addWidget(self.run_timeout)
+        row_params.addStretch()
+        # Fila acciones: Ejecutar + Detener
+        row_acciones = QHBoxLayout()
+        row_acciones.setSpacing(ESPACIO_S)
         self.btn_run = QPushButton("Ejecutar")
         self.btn_run.setObjectName("Primary")
+        self.btn_run.setMinimumHeight(36)
+        self.btn_run.setMinimumWidth(120)
+        self.btn_run.setMaximumWidth(200)
+        self.btn_run.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.btn_run.clicked.connect(self._ejecutar)
         self.btn_stop = QPushButton("Detener")
         self.btn_stop.setObjectName("Secondary")
+        self.btn_stop.setMinimumHeight(36)
+        self.btn_stop.setMinimumWidth(100)
+        self.btn_stop.setMaximumWidth(180)
+        self.btn_stop.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._detener)
-        row.addWidget(self.btn_run)
-        row.addWidget(self.btn_stop)
-        row.addStretch()
+        row_acciones.addWidget(self.btn_run)
+        row_acciones.addWidget(self.btn_stop)
+        row_acciones.addStretch(1)
         c = QFrame()
-        c.setLayout(row)
+        c_lay = QVBoxLayout(c)
+        c_lay.setContentsMargins(0, 0, 0, 0)
+        c_lay.setSpacing(ESPACIO_S)
+        c_lay.addLayout(row_params)
+        c_lay.addLayout(row_acciones)
         v.addWidget(c)
 
         self.run_prog = QProgressBar()
@@ -969,50 +1105,118 @@ class PaginaDetalle(PaginaBase):
     # Pestaña: Visualización
     # =====================================================================
     def _tab_vis(self, eid):
+        from PyQt6.QtWidgets import QSplitter, QScrollArea
+        from PyQt6.QtCore import Qt as _Qt
+
         w = QFrame()
         w.setObjectName("Card")
-        v = QVBoxLayout(w)
-        v.setSpacing(ESPACIO_M)
+        outer = QHBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        top = QHBoxLayout()
+        splitter = QSplitter(_Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(6)
+        splitter.setStyleSheet(
+            "QSplitter::handle { background: #343434; border-radius: 3px; }"
+            "QSplitter::handle:hover { background: #84CC16; }"
+        )
+
+        # ── PANEL IZQUIERDO: controles / ajustes ──────────────────────────
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setMinimumWidth(240)
+        left_scroll.setMaximumWidth(380)
+
+        left_w = QWidget()
+        left_lay = QVBoxLayout(left_w)
+        left_lay.setContentsMargins(ESPACIO_M, ESPACIO_M, ESPACIO_M, ESPACIO_M)
+        left_lay.setSpacing(ESPACIO_M)
+
+        # --- Réplica
+        lbl_rep = QLabel("Réplica")
+        lbl_rep.setObjectName("H2")
+        left_lay.addWidget(lbl_rep)
+
         self.vis_rep = QComboBox()
         self.vis_rep.setToolTip("Réplica / salida a visualizar")
+        self.vis_rep.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        left_lay.addWidget(self.vis_rep)
+
+        # --- Vista
+        lbl_vista = QLabel("Vista")
+        lbl_vista.setObjectName("Muted")
+        left_lay.addWidget(lbl_vista)
+
         self.vis_mode = QComboBox()
         self.vis_mode.addItems(["Ambos", "2D", "3D"])
         self.vis_mode.setToolTip("Vista 2D, 3D o comparada")
+        left_lay.addWidget(self.vis_mode)
+
+        # --- Botones de control
         b_ref = QPushButton("Actualizar")
         b_ref.setObjectName("Secondary")
+        b_ref.setMinimumHeight(34)
+        b_ref.setMaximumWidth(220)
         b_ref.clicked.connect(self._vis_cargar)
+        left_lay.addWidget(b_ref)
+
         b_rst = QPushButton("Restablecer vista")
         b_rst.setObjectName("Secondary")
+        b_rst.setMinimumHeight(34)
+        b_rst.setMaximumWidth(220)
         b_rst.clicked.connect(lambda: self.visor._dibujar() if hasattr(self, "visor") else None)
-        b_vtk = QPushButton("Tumor 3D (PyVista/VTK)")
+        left_lay.addWidget(b_rst)
+
+        # --- Separador
+        sep = QFrame()
+        sep.setObjectName("SeparadorSutil")
+        sep.setFixedHeight(1)
+        left_lay.addWidget(sep)
+
+        # --- Acciones 3D y video
+        lbl_acc = QLabel("Exportar")
+        lbl_acc.setObjectName("Muted")
+        left_lay.addWidget(lbl_acc)
+
+        b_vtk = QPushButton("Tumor 3D (VTK)")
         b_vtk.setObjectName("Primary")
+        b_vtk.setMinimumHeight(36)
+        b_vtk.setMaximumWidth(220)
         b_vtk.setToolTip("Abrir esferas 3D interactivas: rotar, zoom, seleccionar células y ver oxígeno")
         b_vtk.clicked.connect(self._abrir_vtk_detalle)
-        top.addWidget(QLabel("Réplica:"))
-        top.addWidget(self.vis_rep, 1)
-        top.addWidget(QLabel("Vista:"))
-        top.addWidget(self.vis_mode)
-        top.addWidget(b_ref)
-        top.addWidget(b_rst)
-        top.addWidget(b_vtk)
+        left_lay.addWidget(b_vtk)
+
         b_vid2 = QPushButton("Video 2D")
         b_vid2.setObjectName("Secondary")
-        b_vid2.setToolTip("Generar video MP4 2D de los frames de la réplica seleccionada (requiere ffmpeg)")
+        b_vid2.setMinimumHeight(34)
+        b_vid2.setMaximumWidth(220)
+        b_vid2.setToolTip("Generar video MP4 2D (requiere ffmpeg)")
         b_vid2.clicked.connect(lambda: self._generar_video("2d"))
+        left_lay.addWidget(b_vid2)
+
         b_vid3 = QPushButton("Video 3D (VTK)")
         b_vid3.setObjectName("Secondary")
-        b_vid3.setToolTip("Generar video MP4 3D con PyVista/VTK de los frames de la réplica seleccionada (requiere ffmpeg)")
+        b_vid3.setMinimumHeight(34)
+        b_vid3.setMaximumWidth(220)
+        b_vid3.setToolTip("Generar video MP4 3D con PyVista/VTK (requiere ffmpeg)")
         b_vid3.clicked.connect(lambda: self._generar_video("3d"))
-        top.addWidget(b_vid2)
-        top.addWidget(b_vid3)
-        bar = QFrame()
-        bar.setLayout(top)
-        v.addWidget(bar)
+        left_lay.addWidget(b_vid3)
 
+        left_lay.addStretch()
+        left_scroll.setWidget(left_w)
+        splitter.addWidget(left_scroll)
+
+        # ── PANEL DERECHO: visor de imagen ────────────────────────────────
         self.visor = VisorPhysiCell(output_dir="")
-        v.addWidget(self.visor, 1)
+        splitter.addWidget(self.visor)
+
+        # Proporciones: 25% controles / 75% visor
+        splitter.setSizes([260, 740])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+
+        outer.addWidget(splitter)
         self.vis_mode.currentTextChanged.connect(self._vis_modo)
         self._vis_cargar()
         return w
@@ -1183,28 +1387,35 @@ class PaginaDetalle(PaginaBase):
         self.res_log.setMaximumHeight(100)
         v.addWidget(self.res_log)
 
-        row = QHBoxLayout()
-        for lbl, fn in [
-            ("Resumen", self._res_resumen),
-            ("CSV", self._res_csv),
-            ("JSON", self._res_json),
-            ("Temporal", self._res_temporal),
-            ("Consolidar", self._res_consolidar),
-            ("Limpiar", self._res_limpiar),
-        ]:
+        row1 = QHBoxLayout()
+        row2 = QHBoxLayout()
+        acciones_btns = [
+            ("Resumen", self._res_resumen, None),
+            ("CSV", self._res_csv, None),
+            ("JSON", self._res_json, None),
+            ("Temporal", self._res_temporal, "Gráfica de células por frame de la réplica seleccionada"),
+            ("Consolidar", self._res_consolidar, "Genera frames_todas.csv y celulas_todas.csv con todas las réplicas para análisis"),
+            ("Limpiar", self._res_limpiar, "Marca como fallidos los runs sin carpeta de salida"),
+        ]
+        for idx, (lbl, fn, tip) in enumerate(acciones_btns):
             b = QPushButton(lbl)
             b.setObjectName("Secondary")
-            if lbl == "Temporal":
-                b.setToolTip("Gráfica de células por frame de la réplica seleccionada")
-            elif lbl == "Consolidar":
-                b.setToolTip("Genera frames_todas.csv y celulas_todas.csv con todas las réplicas para análisis")
-            elif lbl == "Limpiar":
-                b.setToolTip("Marca como fallidos los runs sin carpeta de salida")
+            b.setMinimumWidth(90)
+            if tip:
+                b.setToolTip(tip)
             b.clicked.connect(fn)
-            row.addWidget(b)
-        row.addStretch()
+            if idx < 3:
+                row1.addWidget(b)
+            else:
+                row2.addWidget(b)
+        row1.addStretch()
+        row2.addStretch()
         c = QFrame()
-        c.setLayout(row)
+        c_lay = QVBoxLayout(c)
+        c_lay.setContentsMargins(0, 0, 0, 0)
+        c_lay.setSpacing(ESPACIO_S)
+        c_lay.addLayout(row1)
+        c_lay.addLayout(row2)
         v.addWidget(c)
         v.addStretch()
         return w
@@ -1365,7 +1576,7 @@ class PaginaDetalle(PaginaBase):
         from .. import estadistica as EST
 
         v.addWidget(QLabel("<b>Comparación estadística entre experimentos</b>: prueba t de Student sobre métricas de réplicas (n.º de células finales)."))
-        row_stats = QHBoxLayout()
+        row_stats_sel = QHBoxLayout()
         self.cmp_exp_a = QComboBox()
         self.cmp_exp_b = QComboBox()
         exps = SERV.listar_experimentos_servicio(self.db_path()) or []
@@ -1374,20 +1585,26 @@ class PaginaDetalle(PaginaBase):
             self.cmp_exp_b.addItem(f"#{r[0]} {r[1] or ''}", r[0])
         if self.cmp_exp_b.count() > 1:
             self.cmp_exp_b.setCurrentIndex(1)
-        row_stats.addWidget(QLabel("Del experimento:"))
-        row_stats.addWidget(self.cmp_exp_a, 2)
-        row_stats.addWidget(QLabel("Con el de:"))
-        row_stats.addWidget(self.cmp_exp_b, 2)
+        row_stats_sel.addWidget(QLabel("Del experimento:"))
+        row_stats_sel.addWidget(self.cmp_exp_a, 2)
+        row_stats_sel.addWidget(QLabel("Con el de:"))
+        row_stats_sel.addWidget(self.cmp_exp_b, 2)
+        row_stats_act = QHBoxLayout()
         b_cmp_stats = QPushButton("Ejecutar comparación (t de Student)")
         b_cmp_stats.setObjectName("Primary")
         b_cmp_stats.clicked.connect(self._cmp_stats)
         b_cmp_stats_csv = QPushButton("Exportar CSV")
         b_cmp_stats_csv.setObjectName("Secondary")
         b_cmp_stats_csv.clicked.connect(self._cmp_stats_csv)
-        row_stats.addWidget(b_cmp_stats)
-        row_stats.addWidget(b_cmp_stats_csv)
+        row_stats_act.addWidget(b_cmp_stats)
+        row_stats_act.addWidget(b_cmp_stats_csv)
+        row_stats_act.addStretch()
         sstats = QFrame()
-        sstats.setLayout(row_stats)
+        sstats_lay = QVBoxLayout(sstats)
+        sstats_lay.setContentsMargins(0, 0, 0, 0)
+        sstats_lay.setSpacing(ESPACIO_S)
+        sstats_lay.addLayout(row_stats_sel)
+        sstats_lay.addLayout(row_stats_act)
         v.addWidget(sstats)
 
         self.cmp_stats_out = QTextEdit()
@@ -1495,16 +1712,30 @@ class PaginaDetalle(PaginaBase):
             self.cmp_va.slider.blockSignals(False)
 
     def _gen_cmp(self):
-        from ..comparacion import generar_grafica_comparacion
-        out = self._exp_dir() + "/comparacion.png"
-        r = generar_grafica_comparacion(self.db_path(), self.current_experiment_id, out)
-        self.cmp_log.append(f"Gráfica: {r['path']} runs={len(r['filas'])} sin_datos={r['sin_datos']}")
-        for f in r["filas"]:
-            self.cmp_log.append(f"run {f['run']}: {f['status']} n_final={f['n_final']}")
-        if os.path.isfile(out):
-            self.cmp_img.setPixmap(__import__("PyQt6.QtGui", fromlist=["QPixmap"]).QPixmap(out).scaledToWidth(
-                640, Qt.TransformationMode.SmoothTransformation
-            ))
+        try:
+            from ..comparacion import generar_grafica_comparacion
+            import os as _os
+            out_dir = self._exp_dir()
+            _os.makedirs(out_dir, exist_ok=True)
+            out = _os.path.join(out_dir, "comparacion.png")
+            r = generar_grafica_comparacion(self.db_path(), self.current_experiment_id, out)
+            if not r.get("ok"):
+                self.cmp_log.append(f"Error generando gráfica: {r.get('error', 'sin detalle')}")
+                QMessageBox.warning(self.lw, "Comparación", r.get("error", "No se pudo generar la gráfica."))
+                return
+            self.cmp_log.append(
+                f"Gráfica: {r.get('path', out)}  runs={len(r.get('filas', []))}  sin_datos={r.get('sin_datos', '?')}"
+            )
+            for f in r.get("filas", []):
+                self.cmp_log.append(f"run {f.get('run', '?')}: {f.get('status', '?')} n_final={f.get('n_final', '?')}")
+            if _os.path.isfile(out):
+                from PyQt6.QtGui import QPixmap
+                self.cmp_img.setPixmap(
+                    QPixmap(out).scaledToWidth(640, Qt.TransformationMode.SmoothTransformation)
+                )
+        except Exception as e:
+            self.cmp_log.append(f"Error en comparación: {e}")
+            QMessageBox.warning(self.lw, "Comparación", f"Error al generar métricas: {e}")
 
     def _cmp_stats(self):
         """Ejecuta la comparación estadística (t de Student) entre dos experimentos."""
@@ -1515,7 +1746,10 @@ class PaginaDetalle(PaginaBase):
             return
         id_a = self.cmp_exp_a.currentData()
         id_b = self.cmp_exp_b.currentData()
-        if id_a is None or id_b is None or int(id_a) == int(id_b):
+        if id_a is None or id_b is None:
+            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos válidos.")
+            return
+        if int(id_a) == int(id_b):
             QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
             return
         try:
@@ -1524,22 +1758,28 @@ class PaginaDetalle(PaginaBase):
             QMessageBox.critical(self.lw, "Comparación", f"Error al comparar: {e}")
             return
         comps = r.get("comparaciones") or {}
+        # La clave puede formarse con cualquier orden — buscar ambas variantes
         clave = f"{int(id_a)}_vs_{int(id_b)}"
-        c = comps.get(clave)
+        clave_inv = f"{int(id_b)}_vs_{int(id_a)}"
+        c = comps.get(clave) or comps.get(clave_inv)
         if not c:
             self.cmp_stats_out.setText(
                 f"Experimento {id_a} vs {id_b}\n"
-                "Sin datos comparables: se requieren al menos 2 réplicas válidas por experimento "
-                "para la prueba t de Student."
+                "Sin datos comparables: se requieren al menos 2 réplicas con resultados válidos "
+                "por experimento para la prueba t de Student.\n\n"
+                "Asegúrate de que los experimentos tengan réplicas completadas con carpeta de salida."
             )
             return
         sig = "SÍ" if c.get("significativo") else "NO"
-        texto = (
-            f"Experimento {id_a} vs {id_b}\n"
-            f"  n células finales: media={c.get('media1'):.2f} (n={c.get('n1')}, std={c.get('std1'):.2f}) "
-            f"vs {c.get('media2'):.2f} (n={c.get('n2')}, std={c.get('std2'):.2f})\n"
-            f"  t = {c.get('t'):.3f}, p = {c.get('p'):.4f} -> Diferencia significativa: {sig}"
-        )
+        try:
+            texto = (
+                f"Experimento {id_a} vs {id_b}\n"
+                f"  Células finales: media={c.get('media1', 0):.2f} (n={c.get('n1', 0)}, std={c.get('std1', 0):.2f}) "
+                f"vs {c.get('media2', 0):.2f} (n={c.get('n2', 0)}, std={c.get('std2', 0):.2f})\n"
+                f"  t = {c.get('t', 0):.3f},  p = {c.get('p', 1):.4f}  →  Diferencia significativa: {sig}"
+            )
+        except Exception as e:
+            texto = f"Error formateando resultados: {e}\nDatos brutos: {c}"
         self.cmp_stats_out.setText(texto)
         self.cmp_stats_out.setReadOnly(True)
 
@@ -1552,7 +1792,10 @@ class PaginaDetalle(PaginaBase):
             return
         id_a = self.cmp_exp_a.currentData()
         id_b = self.cmp_exp_b.currentData()
-        if id_a is None or id_b is None or int(id_a) == int(id_b):
+        if id_a is None or id_b is None:
+            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos válidos.")
+            return
+        if int(id_a) == int(id_b):
             QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
             return
         try:
@@ -1560,12 +1803,18 @@ class PaginaDetalle(PaginaBase):
         except Exception as e:
             QMessageBox.critical(self.lw, "Comparación", f"Error al exportar: {e}")
             return
-        if not (r.get("comparaciones") or {}):
+        if not (r.get("datos_por_experimento") or {}):
             QMessageBox.warning(self.lw, "Comparación", "Sin datos para exportar.")
             return
-        salida = os.path.join(self._exp_dir(), "comparacion_estadistica.csv")
-        p = EST.exportar_comparacion_csv(r, salida)
-        QMessageBox.information(self.lw, "Comparación", f"CSV exportado:\n{p}")
+        try:
+            import os as _os
+            out_dir = self._exp_dir()
+            _os.makedirs(out_dir, exist_ok=True)
+            salida = _os.path.join(out_dir, "comparacion_estadistica.csv")
+            p = EST.exportar_comparacion_csv(r, salida)
+            QMessageBox.information(self.lw, "Comparación", f"CSV exportado:\n{p}")
+        except Exception as e:
+            QMessageBox.warning(self.lw, "Comparación", f"Error al guardar CSV: {e}")
 
     # =====================================================================
     # Pestaña: Reportes
@@ -1602,6 +1851,7 @@ class PaginaDetalle(PaginaBase):
         for lbl in ("Informe HTML", "PDF", "CSV", "JSON"):
             b = QPushButton(lbl)
             b.setObjectName("Primary" if lbl == "Informe HTML" else "Secondary")
+            b.setMinimumWidth(90)
             b.clicked.connect(lambda _=False, k=lbl: self._rep_exportar(k))
             row.addWidget(b)
         row.addStretch()

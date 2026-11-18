@@ -5,7 +5,7 @@ segunda ventana ni diálogo independiente.
 """
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QWidget, QFrame, QMessageBox
+    QWidget, QFrame, QMessageBox, QSizePolicy
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -34,8 +34,10 @@ class PaginaLogin(PaginaBase):
 
         # Tarjeta central con el formulario de login
         tarjeta = Tarjeta(elevado=True)
-        tarjeta.setFixedWidth(420)
-        tarjeta.setFixedHeight(520)
+        tarjeta.setMinimumWidth(320)
+        tarjeta.setMaximumWidth(460)
+        tarjeta.setMinimumHeight(420)
+        tarjeta.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         tlay = tarjeta.layout_interno()
         tlay.setContentsMargins(ESPACIO_L, ESPACIO_L, ESPACIO_L, ESPACIO_L)

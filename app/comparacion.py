@@ -62,23 +62,29 @@ def datos_comparacion(db_path, experiment_id):
 
 
 def generar_grafica_comparacion(db_path, experiment_id, out_png):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    filas = datos_comparacion(db_path, experiment_id)
-    os.makedirs(os.path.dirname(out_png) or ".", exist_ok=True)
-    runs = [f["run"] for f in filas]
-    vals = [f["n_final"] if f["n_final"] is not None else 0 for f in filas]
-    faltan = [f for f in filas if f["n_final"] is None]
-    plt.figure(figsize=(7, 3.5))
-    plt.bar(runs, vals)
-    plt.xlabel("Replica / run")
-    plt.ylabel("Celulas finales")
-    plt.title(f"Comparacion experimento {experiment_id} ({len(filas)} runs)")
-    plt.tight_layout()
-    plt.savefig(out_png, dpi=110)
-    plt.close()
-    return {"ok": True, "path": out_png, "filas": filas, "sin_datos": len(faltan)}
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        filas = datos_comparacion(db_path, experiment_id)
+        out_dir = os.path.dirname(out_png)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        runs = [f["run"] for f in filas]
+        vals = [f["n_final"] if f["n_final"] is not None else 0 for f in filas]
+        faltan = [f for f in filas if f["n_final"] is None]
+        plt.figure(figsize=(7, 3.5))
+        plt.bar(runs, vals)
+        plt.xlabel("Replica / run")
+        plt.ylabel("Celulas finales")
+        plt.title(f"Comparacion experimento {experiment_id} ({len(filas)} runs)")
+        plt.tight_layout()
+        plt.savefig(out_png, dpi=110)
+        plt.close()
+        return {"ok": True, "path": out_png, "filas": filas, "sin_datos": len(faltan)}
+    except Exception as e:
+        logger.error("generar_grafica_comparacion: %s", e)
+        return {"ok": False, "error": str(e), "path": out_png, "filas": [], "sin_datos": 0}
 
 
 def generar_grafica_temporal(output_dir, out_png):

@@ -307,8 +307,16 @@ class LabWindow(QMainWindow):
 
         btn_cerrar = QPushButton("Cerrar")
         btn_cerrar.setObjectName("Secondary")
+        btn_cerrar.setMinimumHeight(34)
+        btn_cerrar.setMaximumWidth(150)
         btn_cerrar.clicked.connect(dlg.reject)
-        lay.addWidget(btn_cerrar)
+        row_cerrar = QHBoxLayout()
+        row_cerrar.addStretch(1)
+        row_cerrar.addWidget(btn_cerrar)
+        from PyQt6.QtWidgets import QWidget as _QW2
+        cont_cerrar = _QW2()
+        cont_cerrar.setLayout(row_cerrar)
+        lay.addWidget(cont_cerrar)
 
         conn.close()
         dlg.exec()
@@ -329,3 +337,24 @@ class LabWindow(QMainWindow):
 
     def refrescar_reportes(self):
         self.paginas["Reportes"].refrescar()
+
+    def closeEvent(self, event):
+        """Detiene hilos de fondo antes de cerrar para evitar crash al salir."""
+        try:
+            worker = getattr(self.pagina_detalle, "worker", None)
+            if worker is not None and hasattr(worker, "isRunning") and worker.isRunning():
+                worker.stop()
+                worker.wait(3000)  # esperar máximo 3 s
+        except Exception:
+            pass
+        try:
+            # Detener hilo del visor si sigue corriendo
+            visor = getattr(self.pagina_detalle, "visor", None)
+            if visor is not None:
+                tl = getattr(visor, "_tl", None)
+                if tl is not None and hasattr(tl, "isRunning") and tl.isRunning():
+                    tl.quit()
+                    tl.wait(2000)
+        except Exception:
+            pass
+        super().closeEvent(event)

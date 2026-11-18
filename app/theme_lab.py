@@ -39,11 +39,11 @@ GROSOR_BORDE = 1
 
 # ---------- Tipografía ----------
 FUENTE_BASE = "'Segoe UI', 'Inter', sans-serif"
-TAM_BASE = 13
-TAM_H1 = 20
-TAM_H2 = 14
-TAM_TEXTO = 13
-TAM_MENOR = 11
+TAM_BASE = 14
+TAM_H1 = 24
+TAM_H2 = 18
+TAM_TEXTO = 14
+TAM_MENOR = 12
 TAM_KPI = 40
 
 LAB_QSS = f"""
@@ -371,6 +371,12 @@ QPushButton#NavBtn:focus {{
     border-color: {BORDE_ENFOQUE};
 }}
 
+/* ---------- Diálogos ---------- */
+QDialog {{
+    background-color: {FONDO};
+    color: {TEXTO};
+}}
+
 /* ---------- Botones de QMessageBox y diálogos ---------- */
 QMessageBox QPushButton {{
     min-width: 90px;
@@ -566,6 +572,26 @@ QFrame#Separador {{
     background-color: {BORDE};
     max-height: 1px;
     border: none;
+}}
+
+/* ---------- Widgets base internos (fallback) ---------- */
+QLabel {{
+    background: transparent;
+    color: {TEXTO};
+    font-size: {TAM_BASE}px;
+}}
+QTextEdit, QPlainTextEdit {{
+    background-color: {TARJETA};
+    border: {GRIS_BORDE}px solid {BORDE};
+    border-radius: {RADIO_S}px;
+    padding: 6px;
+}}
+QGroupBox {{
+    border: {GRIS_BORDE}px solid {BORDE};
+    border-radius: {RADIO_S}px;
+}}
+QFrame {{
+    background: transparent;
 }}
 """
 
@@ -876,6 +902,12 @@ QPushButton#NavBtn:focus {{
     border-color: {BORDE_ENFOQUE};
 }}
 
+/* ---------- Diálogos ---------- */
+QDialog {{
+    background-color: #F7F7F5;
+    color: #37352F;
+}}
+
 /* ---------- Botones de QMessageBox y diálogos ---------- */
 QMessageBox QPushButton {{
     min-width: 90px;
@@ -1077,6 +1109,26 @@ QFrame#Separador {{
     background-color: {BORDE};
     max-height: 1px;
     border: none;
+}}
+
+/* ---------- Widgets base internos (fallback) ---------- */
+QLabel {{
+    background: transparent;
+    color: #37352F;
+    font-size: {TAM_BASE}px;
+}}
+QTextEdit, QPlainTextEdit {{
+    background-color: #FFFFFF;
+    border: {GRIS_BORDE}px solid {BORDE};
+    border-radius: {RADIO_S}px;
+    padding: 6px;
+}}
+QGroupBox {{
+    border: {GRIS_BORDE}px solid {BORDE};
+    border-radius: {RADIO_S}px;
+}}
+QFrame {{
+    background: transparent;
 }}
 """
 
