@@ -120,6 +120,44 @@ def comparar_experimentos(db_path: str, experiment_ids: List[int]) -> dict:
     }
 
 
+def comparar_replicas_experimento(db_path: str, experiment_id: int) -> dict:
+    """Compara las réplicas (runs) de un mismo experimento mediante t de Student.
+
+    A diferencia de ``comparar_experimentos`` (que compara métricas entre
+    experimentos), esta función compara los pares de réplicas dentro de un
+    único experimento, usando el número de células finales como variable.
+    """
+    datos = datos_por_experimento(db_path, experiment_id)
+    items = [
+        {"run": int(m.get("run") or 0), "n_celulas_final": float(m.get("n_celulas_final"))}
+        for m in datos
+        if m.get("n_celulas_final") is not None
+    ]
+
+    comparaciones = {}
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            a, b = items[i], items[j]
+            t, p = sp_stats.ttest_ind([a["n_celulas_final"]], [b["n_celulas_final"]])
+            comparaciones[f"{a['run']}_vs_{b['run']}"] = {
+                "t": float(t),
+                "p": float(p),
+                "media1": float(a["n_celulas_final"]),
+                "media2": float(b["n_celulas_final"]),
+                "std1": float(np.std([a["n_celulas_final"]])),
+                "std2": float(np.std([b["n_celulas_final"]])),
+                "n1": 1,
+                "n2": 1,
+                "significativo": bool(p < 0.05),
+            }
+
+    return {
+        "experimento": experiment_id,
+        "datos": items,
+        "comparaciones": comparaciones,
+    }
+
+
 def exportar_comparacion_csv(resultado: dict, salida_csv: str) -> str:
     """Exporta los datos crudos de comparación a CSV."""
     os.makedirs(os.path.dirname(salida_csv) or ".", exist_ok=True)

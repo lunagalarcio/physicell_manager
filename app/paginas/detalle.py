@@ -1571,11 +1571,11 @@ class PaginaDetalle(PaginaBase):
         info.setWordWrap(True)
         v.addWidget(info)
 
-        # ---------- Comparación estadística entre experimentos (t de Student) ----------
+        # ---------- Comparación estadística dentro del experimento (t de Student entre réplicas) ----------
         from .. import servicios as SERV
         from .. import estadistica as EST
 
-        v.addWidget(QLabel("<b>Comparación estadística entre experimentos</b>: prueba t de Student sobre métricas de réplicas (n.º de células finales)."))
+        v.addWidget(QLabel("<b>Comparación estadística dentro del experimento (t de Student entre réplicas)</b>: prueba t de Student sobre métricas de réplicas (n.º de células finales)."))
         row_stats_sel = QHBoxLayout()
         self.cmp_exp_a = QComboBox()
         self.cmp_exp_b = QComboBox()
@@ -1738,48 +1738,33 @@ class PaginaDetalle(PaginaBase):
             QMessageBox.warning(self.lw, "Comparación", f"Error al generar métricas: {e}")
 
     def _cmp_stats(self):
-        """Ejecuta la comparación estadística (t de Student) entre dos experimentos."""
+        """Ejecuta la comparación estadística (t de Student) entre las réplicas del experimento."""
         from PyQt6.QtWidgets import QMessageBox
         from .. import estadistica as EST
-        if self.cmp_exp_a.count() < 1 or self.cmp_exp_b.count() < 1:
-            QMessageBox.warning(self.lw, "Comparación", "No hay experimentos registrados.")
-            return
-        id_a = self.cmp_exp_a.currentData()
-        id_b = self.cmp_exp_b.currentData()
-        if id_a is None or id_b is None:
-            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos válidos.")
-            return
-        if int(id_a) == int(id_b):
-            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
+        eid = int(getattr(self, "current_experiment_id", None) or 0)
+        if not eid:
+            QMessageBox.warning(self.lw, "Comparación", "No hay experimento activo.")
             return
         try:
-            r = EST.comparar_experimentos(self.db_path(), [int(id_a), int(id_b)])
+            r = EST.comparar_replicas_experimento(self.db_path(), eid)
         except Exception as e:
             QMessageBox.critical(self.lw, "Comparación", f"Error al comparar: {e}")
             return
         comps = r.get("comparaciones") or {}
-        # La clave puede formarse con cualquier orden — buscar ambas variantes
-        clave = f"{int(id_a)}_vs_{int(id_b)}"
-        clave_inv = f"{int(id_b)}_vs_{int(id_a)}"
-        c = comps.get(clave) or comps.get(clave_inv)
-        if not c:
+        if not comps:
             self.cmp_stats_out.setText(
-                f"Experimento {id_a} vs {id_b}\n"
+                f"Experimento {eid}\n"
                 "Sin datos comparables: se requieren al menos 2 réplicas con resultados válidos "
-                "por experimento para la prueba t de Student.\n\n"
-                "Asegúrate de que los experimentos tengan réplicas completadas con carpeta de salida."
+                "para la prueba t de Student.\n\n"
+                "Asegúrate de que el experimento tenga réplicas completadas con carpeta de salida."
             )
             return
-        sig = "SÍ" if c.get("significativo") else "NO"
-        try:
-            texto = (
-                f"Experimento {id_a} vs {id_b}\n"
-                f"  Células finales: media={c.get('media1', 0):.2f} (n={c.get('n1', 0)}, std={c.get('std1', 0):.2f}) "
-                f"vs {c.get('media2', 0):.2f} (n={c.get('n2', 0)}, std={c.get('std2', 0):.2f})\n"
-                f"  t = {c.get('t', 0):.3f},  p = {c.get('p', 1):.4f}  →  Diferencia significativa: {sig}"
+        texto = f"Experimento {eid} — comparación entre réplicas (t de Student)\n"
+        for clave, c in comps.items():
+            sig = "SÍ" if c.get("significativo") else "NO"
+            texto += (
+                f"  {clave}: t = {c.get('t', 0):.3f}, p = {c.get('p', 1):.4f}  →  Diferencia significativa: {sig}\n"
             )
-        except Exception as e:
-            texto = f"Error formateando resultados: {e}\nDatos brutos: {c}"
         self.cmp_stats_out.setText(texto)
         self.cmp_stats_out.setReadOnly(True)
 
@@ -1787,23 +1772,16 @@ class PaginaDetalle(PaginaBase):
         """Exporta los datos de réplica (n.º células finales) de la comparación a CSV."""
         from PyQt6.QtWidgets import QMessageBox
         from .. import estadistica as EST
-        if self.cmp_exp_a.count() < 1 or self.cmp_exp_b.count() < 1:
-            QMessageBox.warning(self.lw, "Comparación", "No hay experimentos registrados.")
-            return
-        id_a = self.cmp_exp_a.currentData()
-        id_b = self.cmp_exp_b.currentData()
-        if id_a is None or id_b is None:
-            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos válidos.")
-            return
-        if int(id_a) == int(id_b):
-            QMessageBox.warning(self.lw, "Comparación", "Selecciona dos experimentos distintos.")
+        eid = int(getattr(self, "current_experiment_id", None) or 0)
+        if not eid:
+            QMessageBox.warning(self.lw, "Comparación", "No hay experimento activo.")
             return
         try:
-            r = EST.comparar_experimentos(self.db_path(), [int(id_a), int(id_b)])
+            r = EST.comparar_replicas_experimento(self.db_path(), eid)
         except Exception as e:
             QMessageBox.critical(self.lw, "Comparación", f"Error al exportar: {e}")
             return
-        if not (r.get("datos_por_experimento") or {}):
+        if not (r.get("datos") or []):
             QMessageBox.warning(self.lw, "Comparación", "Sin datos para exportar.")
             return
         try:
@@ -1811,7 +1789,11 @@ class PaginaDetalle(PaginaBase):
             out_dir = self._exp_dir()
             _os.makedirs(out_dir, exist_ok=True)
             salida = _os.path.join(out_dir, "comparacion_estadistica.csv")
-            p = EST.exportar_comparacion_csv(r, salida)
+            res = {
+                "datos_por_experimento": {str(eid): r.get("datos") or []},
+                "comparaciones": r.get("comparaciones") or {},
+            }
+            p = EST.exportar_comparacion_csv(res, salida)
             QMessageBox.information(self.lw, "Comparación", f"CSV exportado:\n{p}")
         except Exception as e:
             QMessageBox.warning(self.lw, "Comparación", f"Error al guardar CSV: {e}")
