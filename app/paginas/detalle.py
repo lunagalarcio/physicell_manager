@@ -1572,23 +1572,7 @@ class PaginaDetalle(PaginaBase):
         v.addWidget(info)
 
         # ---------- Comparación estadística dentro del experimento (t de Student entre réplicas) ----------
-        from .. import servicios as SERV
-        from .. import estadistica as EST
-
         v.addWidget(QLabel("<b>Comparación estadística dentro del experimento (t de Student entre réplicas)</b>: prueba t de Student sobre métricas de réplicas (n.º de células finales)."))
-        row_stats_sel = QHBoxLayout()
-        self.cmp_exp_a = QComboBox()
-        self.cmp_exp_b = QComboBox()
-        exps = SERV.listar_experimentos_servicio(self.db_path()) or []
-        for r in exps:
-            self.cmp_exp_a.addItem(f"#{r[0]} {r[1] or ''}", r[0])
-            self.cmp_exp_b.addItem(f"#{r[0]} {r[1] or ''}", r[0])
-        if self.cmp_exp_b.count() > 1:
-            self.cmp_exp_b.setCurrentIndex(1)
-        row_stats_sel.addWidget(QLabel("Del experimento:"))
-        row_stats_sel.addWidget(self.cmp_exp_a, 2)
-        row_stats_sel.addWidget(QLabel("Con el de:"))
-        row_stats_sel.addWidget(self.cmp_exp_b, 2)
         row_stats_act = QHBoxLayout()
         b_cmp_stats = QPushButton("Ejecutar comparación (t de Student)")
         b_cmp_stats.setObjectName("Primary")
@@ -1603,7 +1587,7 @@ class PaginaDetalle(PaginaBase):
         sstats_lay = QVBoxLayout(sstats)
         sstats_lay.setContentsMargins(0, 0, 0, 0)
         sstats_lay.setSpacing(ESPACIO_S)
-        sstats_lay.addLayout(row_stats_sel)
+        sstats_lay.addLayout(row_stats_act)
         sstats_lay.addLayout(row_stats_act)
         v.addWidget(sstats)
 
